@@ -1508,7 +1508,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=301')
+                navigator.serviceWorker.register('./sw.js?v=302')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -1759,7 +1759,7 @@ async function gerarFichaPDFBase64(formData, materiais, fotos, assinaturas) {
     doc.text('TÉCNICO', spacing + signatureWidth / 2, y + 3, { align: 'center' });
     doc.text('CLIENTE', spacing * 2 + signatureWidth + signatureWidth / 2, y + 3, { align: 'center' });
     
-    // RETORNA BASE64 ao invés de fazer download
+    doc.save('Ficha_Manutencao.pdf');
     return doc.output('datauristring');
 }
 
@@ -1988,7 +1988,7 @@ async function gerarRelatorioPDFBase64(formData, materiais, fotos, assinaturas) 
     doc.text('TÉCNICO', spacing + signatureWidth / 2, y + 3, { align: 'center' });
     doc.text('CLIENTE', spacing * 2 + signatureWidth + signatureWidth / 2, y + 3, { align: 'center' });
     
-    // RETORNA BASE64 ao invés de fazer download
+    doc.save('Relatorio_Servico.pdf');
     return doc.output('datauristring');
 }
 
