@@ -3,7 +3,7 @@ importScripts('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.
 importScripts('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js');
 
 // Nome do cache – altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v302';
+const CACHE_NAME = 'formulario-cache-v303';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
