@@ -1508,7 +1508,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=302')
+                navigator.serviceWorker.register('./sw.js?v=303')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -1572,13 +1572,13 @@ async function gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas)
 
     try {
         // Gera e faz download da Ficha
-        await gerarFichaPDF(formData, materiais, fotos, assinaturas);
+        await gerarFichaPDFBase64(formData, materiais, fotos, assinaturas);
         
         // Pequeno delay entre downloads
         await new Promise(resolve => setTimeout(resolve, 500));
         
         // Gera e faz download do Relatório
-        await gerarRelatorioPDF(formData, materiais, fotos, assinaturas);
+        await gerarRelatorioPDFBase64(formData, materiais, fotos, assinaturas);
         
         showNotification("PDFs baixados com sucesso!", "success");
     } catch (e) {
