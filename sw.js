@@ -1,12 +1,12 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v100';
+const CACHE_NAME = 'formulario-cache-v101';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
-  'https://servicos.pesoexato.com/',
-  'https://servicos.pesoexato.com/index.html',
-  'https://servicos.pesoexato.com/manifest.json',
+  'https://https://pcmi-castilho.github.io/Formulario/',
+  'https:https://pcmi-castilho.github.io/Formulario/index.html',
+  'https://https://pcmi-castilho.github.io/Formulario/manifest.json',
   // CDNs externos que você usa
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
@@ -25,8 +25,8 @@ self.addEventListener('install', (event) => {
         console.log('📦 Service Worker: Cacheando arquivos essenciais');
         // Cache apenas os arquivos principais, ignora erros em outros
         return cache.addAll([
-          'https://servicos.pesoexato.com/',
-          'https://servicos.pesoexato.com/index.html'
+          'https://https://pcmi-castilho.github.io/Formulario/',
+          'https://https://pcmi-castilho.github.io/Formulario/index.html'
         ]).catch(error => {
           console.warn('⚠️ Alguns arquivos não puderam ser cacheados:', error);
         });
