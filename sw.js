@@ -1,6 +1,6 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v101';
+const CACHE_NAME = 'formulario-cache-v102';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
