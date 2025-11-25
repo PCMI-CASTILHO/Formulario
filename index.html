@@ -1217,42 +1217,60 @@ async function limparRegistrosAntigos(db) {
 }
 
 // Salva o formulário no IndexedDB
-async function salvarFormularioLocal(pdfFichaBase64, pdfRelatorioBase64) {
+async function salvarFormularioLocal() {
+    // Estas funções precisam estar definidas no seu escopo global
+    // if (!validateForm()) return; 
+    // const f = collectFormData(); 
+
+    // **ASSUME-SE** que `validateForm()` e `collectFormData()` existem e são síncronas.
+    if (!validateForm()) return;
+    const f = collectFormData(); 
+
+    const id = Date.now();
 
     const registro = {
-        id: Date.now(),
-        chaveUnica: generateUniqueKey(),
-        pdfFicha: pdfFichaBase64,
-        pdfRelatorio: pdfRelatorioBase64,
-        sincronizado: false,
-        createdAt: new Date().toISOString()
+        id: id, 
+        createdAt: new Date().toISOString(),
+        cliente: f.cliente || '',
+        servico: f.servico || '',
+        formData: f,
+        // Incluímos fotos e assinaturas.
+        fotos: state.fotos || [], 
+        materiais: state.materiais || [],
+        assinaturas: state.assinaturas || {},
+		sincronizado: false,
+		syncedAt: null,
+		chaveUnica: generateUniqueKey()
     };
 
     try {
-        const db = await initDB();
-        
-        // Salva no IndexedDB
-        await db.put(STORE_NAME, registro);
+    const db = await initDB();
+    
+    // 1. Salva o novo registro no IndexedDB
+    await db.put(STORE_NAME, registro);
 
-        // Registra background sync
-        await registrarBackgroundSync();
-        
-        // Atualiza badge de pendentes
-        await updatePendingCount();
+    // ✅ REGISTRA BACKGROUND SYNC AQUI! (NOVA LINHA)
+    await registrarBackgroundSync();
+    
+    // Atualizar contagem de pendentes
+    await updatePendingCount();
 
-        // Se estiver online, tenta sincronizar automaticamente
-        if (navigator.onLine) {
-            setTimeout(() => attemptSync(), 1000);
-        }
+    // Tentar sincronizar automaticamente se online
+    if (navigator.onLine) {
+        setTimeout(() => attemptSync(), 1000);
+    }
 
-        showNotification('Formulário salvo localmente!', 'success');
+    showNotification('Formulário salvo localmente!', 'success');
+    
+    // 2. Renderiza a UI e garante a limpeza
+    await renderFormulariosSalvos();
         
-        // Atualiza a interface
+        // 2. Renderiza a UI e garante a limpeza
         await renderFormulariosSalvos();
-
     } catch (e) {
         console.error("Erro ao salvar no IndexedDB:", e);
-        showNotification('Erro ao salvar no armazenamento local.', 'error');
+        // QuotaExceededError pode acontecer até no IndexedDB, mas é raro
+        showNotification('Erro: Falha ao salvar no armazenamento local. Verifique a cota.', 'error');
     }
 }
 
@@ -1490,7 +1508,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=202')
+                navigator.serviceWorker.register('./sw.js?v=300')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -1545,13 +1563,28 @@ exportBtn.addEventListener('click', function(e) {
 // ======== GERADOR DE PDF (FORMATAÇÃO ORIGINAL DO GERADOR PDF.html) ========
 
 // Garante que o jsPDF foi carregado antes de gerar
-async function gerarPDFsAutomaticamente() {
-    const f = collectFormData();
+async function gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas) {
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+        console.warn("jsPDF ainda não carregado, adiando geração...");
+        setTimeout(() => gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas), 500);
+        return;
+    }
 
-    const pdfFichaBase64 = await gerarFichaPDF(f);
-    const pdfRelatorioBase64 = await gerarRelatorioPDF(f);
-
-    await salvarFormularioLocal(pdfFichaBase64, pdfRelatorioBase64);
+    try {
+        // Gera e faz download da Ficha
+        await gerarFichaPDF(formData, materiais, fotos, assinaturas);
+        
+        // Pequeno delay entre downloads
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Gera e faz download do Relatório
+        await gerarRelatorioPDF(formData, materiais, fotos, assinaturas);
+        
+        showNotification("PDFs baixados com sucesso!", "success");
+    } catch (e) {
+        console.error("Erro ao gerar PDFs:", e);
+        showNotification("Erro ao gerar PDFs", "error");
+    }
 }
 
 // Função auxiliar para formatar data
@@ -1565,405 +1598,398 @@ function formatDate(dateString) {
 }
 
 // ======== FICHA DE MANUTENÇÃO ========
-async function gerarFichaPDF(f) {
-    try {
-        const { jsPDF } = window.jspdf;
-        const docFicha = new jsPDF();
-	    const logo = await carregarImagem("Logo.png");
-	    const pageWidth = doc.internal.pageSize.getWidth();
-	    const pageHeight = doc.internal.pageSize.getHeight();
-	    let y = 20;
-	
-	    // Logo e cabeçalho
-	    doc.setFillColor(0, 82, 163);
-	    doc.rect(0, 0, pageWidth, 17, 'F');
-		
-	    if (logo) doc.addImage(logo, "PNG", 10, 1.5, 30, 15);
-	    
-	
-	    doc.setTextColor(255, 255, 255);
-	    doc.setFontSize(14);
-	    doc.setFont('helvetica', 'bold');
-	    doc.text('FICHA DE MANUTENÇÃO', pageWidth / 2, 11, { align: 'center' });
-	    y = 22;
-	
-	    const tableStyles4Col = {
-	        styles: { fontSize: 8, cellPadding: 3, halign: 'center' },
-	        headStyles: { fillColor: [0, 82, 163], textColor: 255, fontStyle: 'bold', halign: 'center' },
-	        columnStyles: {
-	            0: { cellWidth: (pageWidth - 16) / 4 },
-	            1: { cellWidth: (pageWidth - 16) / 4 },
-	            2: { cellWidth: (pageWidth - 16) / 4 },
-	            3: { cellWidth: (pageWidth - 16) / 4 }
-	        },
-	        margin: { left: 8, right: 8 },
-	        theme: 'grid'
-	    };
-	    
-	    const table1Data = [[
-	        formData.cliente || '-',
-	        formData.cidade || '-',
-	        formData.equipamento || '-',
-	        formData.numeroSerie || '-'
-	    ]];
-	    
-	    doc.autoTable({
-	        startY: y,
-	        head: [['CLIENTE', 'CIDADE', 'EQUIPAMENTO', 'Nº SÉRIE']],
-	        body: table1Data,
-	        ...tableStyles4Col
-	    });
-	    
-	    y = doc.lastAutoTable.finalY + 4;
-	    
-	    const table2Data = [[
-	        formData.tecnico || '-',
-	        formData.veiculo || '-',
-	        formData.estoque || '-',
-	        formData.dataInicial ? formatDate(formData.dataInicial) : '-'
-	    ]];
-	    
-	    doc.autoTable({
-	        startY: y,
-	        head: [['TÉCNICO', 'VEÍCULO', 'ESTOQUE', 'DATA']],
-	        body: table2Data,
-	        ...tableStyles4Col
-	    });
-	    
-	    y = doc.lastAutoTable.finalY + 8;
-	    
-	    doc.setTextColor(0, 82, 163);
-	    doc.setFontSize(10);
-	    doc.setFont('helvetica', 'bold');
-	    doc.text('MATERIAIS UTILIZADOS', 10, y);
-	    y += 6;
-	    
-	    const materialsData = [];
-	    if (materiais && materiais.length > 0) {
-	        materiais.forEach(material => {
-	            materialsData.push([
-	                material.codigo || '',
-	                material.quantidade || '',
-	                material.descricao || ''
-	            ]);
-	        });
-	    } else {
-	        materialsData.push(['', '', 'Nenhum material utilizado.']);
-	    }
-	    
-	    doc.autoTable({
-	        startY: y,
-	        head: [['CÓDIGO', 'QNTD', 'MATERIAIS']],
-	        body: materialsData,
-	        styles: { fontSize: 8, cellPadding: 3 },
-	        headStyles: { fillColor: [0, 82, 163], textColor: 255, fontStyle: 'bold', halign: 'center' },
-	        columnStyles: {
-	            0: { cellWidth: 25, halign: 'center' },
-	            1: { cellWidth: 20, halign: 'center' },
-	            2: { cellWidth: pageWidth - 16 - 45, halign: 'left' }
-	        },
-	        margin: { left: 8, right: 8 },
-	        theme: 'grid'
-	    });
-	    
-	    y = doc.lastAutoTable.finalY + 8;
-	    
-	    doc.setTextColor(0, 82, 163);
-	    doc.setFontSize(10);
-	    doc.setFont('helvetica', 'bold');
-	    doc.text('ORDEM DE SERVIÇO', 10, y);
-	    y += 6;
-	    
-	    const table3Data = [[
-	        formData.osComplementar || '',
-	        formData.osServico || ''
-	    ]];
-	    
-	    doc.autoTable({
-	        startY: y,
-	        head: [['OS COMPLEMENTAR', 'OS SERVIÇO']],
-	        body: table3Data,
-	        styles: { fontSize: 8, cellPadding: 3, halign: 'center' },
-	        headStyles: { fillColor: [0, 82, 163], textColor: 255, fontStyle: 'bold', halign: 'center' },
-	        columnStyles: {
-	            0: { cellWidth: (pageWidth - 16) / 2 },
-	            1: { cellWidth: (pageWidth - 16) / 2 }
-	        },
-	        margin: { left: 8, right: 8 },
-	        theme: 'grid'
-	    });
-	    
-	    y = doc.lastAutoTable.finalY + 15;
-	    
-	    const signatureWidth = 50;
-	    const signatureHeight = 25;
-	    const spacing = (pageWidth - (signatureWidth * 2)) / 3;
-	    
-	    if (assinaturas && assinaturas.tecnico) {
-	        try {
-	            doc.addImage(assinaturas.tecnico, 'PNG', spacing, y, signatureWidth, signatureHeight);
-	        } catch (e) {
-	            console.error('Erro ao adicionar assinatura do técnico:', e);
-	        }
-	    }
-	    
-	    if (assinaturas && assinaturas.cliente) {
-	        try {
-	            doc.addImage(assinaturas.cliente, 'PNG', spacing * 2 + signatureWidth, y, signatureWidth, signatureHeight);
-	        } catch (e) {
-	            console.error('Erro ao adicionar assinatura do cliente:', e);
-	        }
-	    }
-	    
-	    y += signatureHeight + 2;
-	    doc.setDrawColor(0, 0, 0);
-	    doc.setLineWidth(0.3);
-	    doc.line(spacing, y, spacing + signatureWidth, y);
-	    doc.line(spacing * 2 + signatureWidth, y, spacing * 2 + signatureWidth * 2, y);
-	    
-	    doc.setTextColor(0, 0, 0);
-	    doc.setFontSize(7);
-	    doc.setFont('helvetica', 'normal');
-	    doc.text('TÉCNICO', spacing + signatureWidth / 2, y + 3, { align: 'center' });
-	    doc.text('CLIENTE', spacing * 2 + signatureWidth + signatureWidth / 2, y + 3, { align: 'center' });
-	    
-	    return docFicha.output("datauristring");
-} catch (e) {
-        console.error("Erro ao gerar PDFs:", e);
+// Versão modificada que retorna Base64 ao invés de fazer download
+async function gerarFichaPDFBase64(formData, materiais, fotos, assinaturas) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF("p", "mm", "a4");
+    const logo = await carregarImagem("Logo.png");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let y = 20;
+
+    // Logo e cabeçalho
+    doc.setFillColor(0, 82, 163);
+    doc.rect(0, 0, pageWidth, 17, 'F');
+    
+    if (logo) doc.addImage(logo, "PNG", 10, 1.5, 30, 15);
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('FICHA DE MANUTENÇÃO', pageWidth / 2, 11, { align: 'center' });
+    y = 22;
+
+    const tableStyles4Col = {
+        styles: { fontSize: 8, cellPadding: 3, halign: 'center' },
+        headStyles: { fillColor: [0, 82, 163], textColor: 255, fontStyle: 'bold', halign: 'center' },
+        columnStyles: {
+            0: { cellWidth: (pageWidth - 16) / 4 },
+            1: { cellWidth: (pageWidth - 16) / 4 },
+            2: { cellWidth: (pageWidth - 16) / 4 },
+            3: { cellWidth: (pageWidth - 16) / 4 }
+        },
+        margin: { left: 8, right: 8 },
+        theme: 'grid'
+    };
+    
+    const table1Data = [[
+        formData.cliente || '-',
+        formData.cidade || '-',
+        formData.equipamento || '-',
+        formData.numeroSerie || '-'
+    ]];
+    
+    doc.autoTable({
+        startY: y,
+        head: [['CLIENTE', 'CIDADE', 'EQUIPAMENTO', 'Nº SÉRIE']],
+        body: table1Data,
+        ...tableStyles4Col
+    });
+    
+    y = doc.lastAutoTable.finalY + 4;
+    
+    const table2Data = [[
+        formData.tecnico || '-',
+        formData.veiculo || '-',
+        formData.estoque || '-',
+        formData.dataInicial ? formatDate(formData.dataInicial) : '-'
+    ]];
+    
+    doc.autoTable({
+        startY: y,
+        head: [['TÉCNICO', 'VEÍCULO', 'ESTOQUE', 'DATA']],
+        body: table2Data,
+        ...tableStyles4Col
+    });
+    
+    y = doc.lastAutoTable.finalY + 8;
+    
+    doc.setTextColor(0, 82, 163);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('MATERIAIS UTILIZADOS', 10, y);
+    y += 6;
+    
+    const materialsData = [];
+    if (materiais && materiais.length > 0) {
+        materiais.forEach(material => {
+            materialsData.push([
+                material.codigo || '',
+                material.quantidade || '',
+                material.descricao || ''
+            ]);
+        });
+    } else {
+        materialsData.push(['', '', 'Nenhum material utilizado.']);
     }
+    
+    doc.autoTable({
+        startY: y,
+        head: [['CÓDIGO', 'QNTD', 'MATERIAIS']],
+        body: materialsData,
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [0, 82, 163], textColor: 255, fontStyle: 'bold', halign: 'center' },
+        columnStyles: {
+            0: { cellWidth: 25, halign: 'center' },
+            1: { cellWidth: 20, halign: 'center' },
+            2: { cellWidth: pageWidth - 16 - 45, halign: 'left' }
+        },
+        margin: { left: 8, right: 8 },
+        theme: 'grid'
+    });
+    
+    y = doc.lastAutoTable.finalY + 8;
+    
+    doc.setTextColor(0, 82, 163);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('ORDEM DE SERVIÇO', 10, y);
+    y += 6;
+    
+    const table3Data = [[
+        formData.osComplementar || '',
+        formData.osServico || ''
+    ]];
+    
+    doc.autoTable({
+        startY: y,
+        head: [['OS COMPLEMENTAR', 'OS SERVIÇO']],
+        body: table3Data,
+        styles: { fontSize: 8, cellPadding: 3, halign: 'center' },
+        headStyles: { fillColor: [0, 82, 163], textColor: 255, fontStyle: 'bold', halign: 'center' },
+        columnStyles: {
+            0: { cellWidth: (pageWidth - 16) / 2 },
+            1: { cellWidth: (pageWidth - 16) / 2 }
+        },
+        margin: { left: 8, right: 8 },
+        theme: 'grid'
+    });
+    
+    y = doc.lastAutoTable.finalY + 15;
+    
+    const signatureWidth = 50;
+    const signatureHeight = 25;
+    const spacing = (pageWidth - (signatureWidth * 2)) / 3;
+    
+    if (assinaturas && assinaturas.tecnico) {
+        try {
+            doc.addImage(assinaturas.tecnico, 'PNG', spacing, y, signatureWidth, signatureHeight);
+        } catch (e) {
+            console.error('Erro ao adicionar assinatura do técnico:', e);
+        }
+    }
+    
+    if (assinaturas && assinaturas.cliente) {
+        try {
+            doc.addImage(assinaturas.cliente, 'PNG', spacing * 2 + signatureWidth, y, signatureWidth, signatureHeight);
+        } catch (e) {
+            console.error('Erro ao adicionar assinatura do cliente:', e);
+        }
+    }
+    
+    y += signatureHeight + 2;
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
+    doc.line(spacing, y, spacing + signatureWidth, y);
+    doc.line(spacing * 2 + signatureWidth, y, spacing * 2 + signatureWidth * 2, y);
+    
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.text('TÉCNICO', spacing + signatureWidth / 2, y + 3, { align: 'center' });
+    doc.text('CLIENTE', spacing * 2 + signatureWidth + signatureWidth / 2, y + 3, { align: 'center' });
+    
+    // RETORNA BASE64 ao invés de fazer download
+    return doc.output('datauristring');
 }
 
-// ======== RELATÓRIO DE PRESTAÇÃO DE SERVIÇO ========
-async function gerarRelatorioPDF(f) {
-    try {
-        const { jsPDF } = window.jspdf;
-        const docRel = new jsPDF();
-	    const logo = await carregarImagem("Logo.png");
-	    const pageWidth = doc.internal.pageSize.getWidth();
-	    const pageHeight = doc.internal.pageSize.getHeight();
-	    let y = 20;
-	
-	    // Logo e cabeçalho
-	    doc.setFillColor(0, 82, 163);
-	    doc.rect(0, 0, pageWidth, 17, 'F');
-		
-	    if (logo) doc.addImage(logo, "PNG", 10, 1.5, 30, 15);
-	    
-	    doc.setTextColor(255, 255, 255);
-	    doc.setFontSize(14);
-	    doc.setFont('helvetica', 'bold');
-	    doc.text('RELATÓRIO DE PRESTAÇÃO DE SERVIÇO', pageWidth / 2, 11, { align: 'center' });
-	    y = 22;
-	
-	    const tableStyles3Col = {
-	        styles: { fontSize: 8, cellPadding: 3, halign: 'center' },
-	        headStyles: { fillColor: [0, 82, 163], textColor: 255, fontStyle: 'bold', halign: 'center' },
-	        columnStyles: {
-	            0: { cellWidth: (pageWidth - 16) / 3, halign: 'center' },
-	            1: { cellWidth: (pageWidth - 16) / 3, halign: 'center' },
-	            2: { cellWidth: (pageWidth - 16) / 3, halign: 'center' }
-	        },
-	        margin: { left: 8, right: 8 },
-	        theme: 'grid'
-	    };
-	    
-	    const table1Data = [[
-	        formData.cliente || '-',
-	        formData.cidade || '-',
-	        formData.equipamento || '-'
-	    ]];
-	    
-	    doc.autoTable({
-	        startY: y,
-	        head: [['CLIENTE', 'CIDADE', 'EQUIPAMENTO']],
-	        body: table1Data,
-	        ...tableStyles3Col
-	    });
-	    
-	    y = doc.lastAutoTable.finalY + 4;
-	    
-	    const table2Data = [[
-	        formData.tecnico || '-',
-	        formData.dataInicial ? formatDate(formData.dataInicial) : '-',
-	        formData.dataFinal ? formatDate(formData.dataFinal) : '-'
-	    ]];
-	    
-	    doc.autoTable({
-	        startY: y,
-	        head: [['TÉCNICO', 'DATA INICIAL', 'DATA FINAL']],
-	        body: table2Data,
-	        ...tableStyles3Col
-	    });
-	    
-	    y = doc.lastAutoTable.finalY + 4;
-	    
-	    const table3Data = [[
-	        formData.servico || '-',
-	        formData.horaInicial || '-',
-	        formData.horaFinal || '-'
-	    ]];
-	    
-	    doc.autoTable({
-	        startY: y,
-	        head: [['SERVIÇO', 'HORÁRIO INICIAL', 'HORÁRIO FINAL']],
-	        body: table3Data,
-	        ...tableStyles3Col
-	    });
-	    
-	    y = doc.lastAutoTable.finalY + 8;
-	    
-	    doc.setTextColor(0, 82, 163);
-	    doc.setFontSize(10);
-	    doc.setFont('helvetica', 'bold');
-	    doc.text('RELATÓRIO DA MÁQUINA', 10, y);
-	    y += 6;
-	    
-	    const relatorio = formData.relatorioMaquina || 'Nenhum relatório preenchido.';
-	    
-	    doc.setTextColor(0, 0, 0);
-	    doc.setFontSize(9);
-	    doc.setFont('helvetica', 'normal');
-	    
-	    const margin = 10;
-	    const textWidth = pageWidth - (margin * 2);
-	    const lineHeight = 4.5;
-	    
-	    const lines = doc.splitTextToSize(relatorio, textWidth);
-	    const textHeight = lines.length * lineHeight;
-	    
-	    if (y + textHeight + 30 > pageHeight) {
-	        doc.addPage();
-	        y = 20;
-	        doc.setTextColor(0, 82, 163);
-	        doc.setFontSize(10);
-	        doc.setFont('helvetica', 'bold');
-	        doc.text('RELATÓRIO DA MÁQUINA', 10, y);
-	        y += 6;
-	        doc.setTextColor(0, 0, 0);
-	        doc.setFontSize(9);
-	        doc.setFont('helvetica', 'normal');
-	    }
-	    
-	    doc.setFillColor(245, 248, 251);
-	    doc.setDrawColor(208, 218, 230);
-	    doc.roundedRect(margin - 2, y - 2, textWidth + 4, textHeight + 4, 2, 2, 'FD');
-	    
-	    doc.text(lines, margin, y + 2);
-	    y += textHeight + 10;
-	    
-	    if (fotos && fotos.length > 0) {
-	        if (y + 50 > pageHeight) {
-	            doc.addPage();
-	            y = 20;
-	        }
-	        
-	        doc.setTextColor(0, 82, 163);
-	        doc.setFontSize(10);
-	        doc.setFont('helvetica', 'bold');
-	        doc.text('FOTOS DO SERVIÇO', 10, y);
-	        y += 6;
-	        
-	        const numFotos = fotos.length;
-	        let imgWidth, imgHeight, imgsPerRow;
-	        
-	        if (numFotos === 1) {
-	            imgWidth = 80;
-	            imgHeight = 60;
-	            imgsPerRow = 1;
-	        } else if (numFotos === 2) {
-	            imgWidth = 65;
-	            imgHeight = 50;
-	            imgsPerRow = 2;
-	        } else if (numFotos === 3) {
-	            imgWidth = 50;
-	            imgHeight = 40;
-	            imgsPerRow = 3;
-	        } else if (numFotos <= 4) {
-	            imgWidth = 45;
-	            imgHeight = 35;
-	            imgsPerRow = 4;
-	        } else if (numFotos <= 6) {
-	            imgWidth = 45;
-	            imgHeight = 35;
-	            imgsPerRow = 3;
-	        } else {
-	            imgWidth = 40;
-	            imgHeight = 30;
-	            imgsPerRow = 4;
-	        }
-	        
-	        const spacing = (pageWidth - 16 - (imgWidth * imgsPerRow)) / (imgsPerRow + 1);
-	        let currentX = 8 + spacing;
-	        let currentY = y;
-	        let photoCount = 0;
-	        
-	        for (let i = 0; i < numFotos; i++) {
-	            if (photoCount > 0 && photoCount % imgsPerRow === 0) {
-	                currentY += imgHeight + 6;
-	                
-	                if (currentY + imgHeight > pageHeight - 15) {
-	                    doc.addPage();
-	                    currentY = 20;
-	                }
-	                
-	                currentX = 8 + spacing;
-	            }
-	            
-	            try {
-	                doc.addImage(fotos[i].data, 'PNG', currentX, currentY, imgWidth, imgHeight);
-	            } catch (e) {
-	                console.error('Erro ao adicionar imagem:', e);
-	            }
-	            
-	            currentX += imgWidth + spacing;
-	            photoCount++;
-	        }
-	        
-	        y = currentY + imgHeight + 8;
-	    }
-	    
-	    if (y + 35 > pageHeight) {
-	        doc.addPage();
-	        y = 20;
-	    }
-	    
-	    const signatureWidth = 50;
-	    const signatureHeight = 25;
-	    const spacing = (pageWidth - (signatureWidth * 2)) / 3;
-	    
-	    if (assinaturas && assinaturas.tecnico) {
-	        try {
-	            doc.addImage(assinaturas.tecnico, 'PNG', spacing, y, signatureWidth, signatureHeight);
-	        } catch (e) {
-	            console.error('Erro ao adicionar assinatura do técnico:', e);
-	        }
-	    }
-	    
-	    if (assinaturas && assinaturas.cliente) {
-	        try {
-	            doc.addImage(assinaturas.cliente, 'PNG', spacing * 2 + signatureWidth, y, signatureWidth, signatureHeight);
-	        } catch (e) {
-	            console.error('Erro ao adicionar assinatura do cliente:', e);
-	        }
-	    }
-	    
-	    y += signatureHeight + 2;
-	    doc.setDrawColor(0, 0, 0);
-	    doc.setLineWidth(0.3);
-	    doc.line(spacing, y, spacing + signatureWidth, y);
-	    doc.line(spacing * 2 + signatureWidth, y, spacing * 2 + signatureWidth * 2, y);
-	    
-	    doc.setTextColor(0, 0, 0);
-	    doc.setFontSize(7);
-	    doc.setFont('helvetica', 'normal');
-	    doc.text('TÉCNICO', spacing + signatureWidth / 2, y + 3, { align: 'center' });
-	    doc.text('CLIENTE', spacing * 2 + signatureWidth + signatureWidth / 2, y + 3, { align: 'center' });
-	    
-	    const nome = (formData.cliente || 'relatorio').replace(/[^a-zA-Z0-9]/g, "_");
-	    return docRel.output("datauristring");
-    } catch (e) {
-        console.error("Erro ao gerar PDFs:", e);
+// Versão modificada do Relatório que retorna Base64
+async function gerarRelatorioPDFBase64(formData, materiais, fotos, assinaturas) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF("p", "mm", "a4");
+    const logo = await carregarImagem("Logo.png");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let y = 20;
+
+    // Logo e cabeçalho
+    doc.setFillColor(0, 82, 163);
+    doc.rect(0, 0, pageWidth, 17, 'F');
+    
+    if (logo) doc.addImage(logo, "PNG", 10, 1.5, 30, 15);
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('RELATÓRIO DE PRESTAÇÃO DE SERVIÇO', pageWidth / 2, 11, { align: 'center' });
+    y = 22;
+
+    const tableStyles3Col = {
+        styles: { fontSize: 8, cellPadding: 3, halign: 'center' },
+        headStyles: { fillColor: [0, 82, 163], textColor: 255, fontStyle: 'bold', halign: 'center' },
+        columnStyles: {
+            0: { cellWidth: (pageWidth - 16) / 3, halign: 'center' },
+            1: { cellWidth: (pageWidth - 16) / 3, halign: 'center' },
+            2: { cellWidth: (pageWidth - 16) / 3, halign: 'center' }
+        },
+        margin: { left: 8, right: 8 },
+        theme: 'grid'
+    };
+    
+    const table1Data = [[
+        formData.cliente || '-',
+        formData.cidade || '-',
+        formData.equipamento || '-'
+    ]];
+    
+    doc.autoTable({
+        startY: y,
+        head: [['CLIENTE', 'CIDADE', 'EQUIPAMENTO']],
+        body: table1Data,
+        ...tableStyles3Col
+    });
+    
+    y = doc.lastAutoTable.finalY + 4;
+    
+    const table2Data = [[
+        formData.tecnico || '-',
+        formData.dataInicial ? formatDate(formData.dataInicial) : '-',
+        formData.dataFinal ? formatDate(formData.dataFinal) : '-'
+    ]];
+    
+    doc.autoTable({
+        startY: y,
+        head: [['TÉCNICO', 'DATA INICIAL', 'DATA FINAL']],
+        body: table2Data,
+        ...tableStyles3Col
+    });
+    
+    y = doc.lastAutoTable.finalY + 4;
+    
+    const table3Data = [[
+        formData.servico || '-',
+        formData.horaInicial || '-',
+        formData.horaFinal || '-'
+    ]];
+    
+    doc.autoTable({
+        startY: y,
+        head: [['SERVIÇO', 'HORÁRIO INICIAL', 'HORÁRIO FINAL']],
+        body: table3Data,
+        ...tableStyles3Col
+    });
+    
+    y = doc.lastAutoTable.finalY + 8;
+    
+    doc.setTextColor(0, 82, 163);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('RELATÓRIO DA MÁQUINA', 10, y);
+    y += 6;
+    
+    const relatorio = formData.relatorioMaquina || 'Nenhum relatório preenchido.';
+    
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    
+    const margin = 10;
+    const textWidth = pageWidth - (margin * 2);
+    const lineHeight = 4.5;
+    
+    const lines = doc.splitTextToSize(relatorio, textWidth);
+    const textHeight = lines.length * lineHeight;
+    
+    if (y + textHeight + 30 > pageHeight) {
+        doc.addPage();
+        y = 20;
+        doc.setTextColor(0, 82, 163);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text('RELATÓRIO DA MÁQUINA', 10, y);
+        y += 6;
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
     }
+    
+    doc.setFillColor(245, 248, 251);
+    doc.setDrawColor(208, 218, 230);
+    doc.roundedRect(margin - 2, y - 2, textWidth + 4, textHeight + 4, 2, 2, 'FD');
+    
+    doc.text(lines, margin, y + 2);
+    y += textHeight + 10;
+    
+    if (fotos && fotos.length > 0) {
+        if (y + 50 > pageHeight) {
+            doc.addPage();
+            y = 20;
+        }
+        
+        doc.setTextColor(0, 82, 163);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text('FOTOS DO SERVIÇO', 10, y);
+        y += 6;
+        
+        const numFotos = fotos.length;
+        let imgWidth, imgHeight, imgsPerRow;
+        
+        if (numFotos === 1) {
+            imgWidth = 80;
+            imgHeight = 60;
+            imgsPerRow = 1;
+        } else if (numFotos === 2) {
+            imgWidth = 65;
+            imgHeight = 50;
+            imgsPerRow = 2;
+        } else if (numFotos === 3) {
+            imgWidth = 50;
+            imgHeight = 40;
+            imgsPerRow = 3;
+        } else if (numFotos <= 4) {
+            imgWidth = 45;
+            imgHeight = 35;
+            imgsPerRow = 4;
+        } else if (numFotos <= 6) {
+            imgWidth = 45;
+            imgHeight = 35;
+            imgsPerRow = 3;
+        } else {
+            imgWidth = 40;
+            imgHeight = 30;
+            imgsPerRow = 4;
+        }
+        
+        const spacing = (pageWidth - 16 - (imgWidth * imgsPerRow)) / (imgsPerRow + 1);
+        let currentX = 8 + spacing;
+        let currentY = y;
+        let photoCount = 0;
+        
+        for (let i = 0; i < numFotos; i++) {
+            if (photoCount > 0 && photoCount % imgsPerRow === 0) {
+                currentY += imgHeight + 6;
+                
+                if (currentY + imgHeight > pageHeight - 15) {
+                    doc.addPage();
+                    currentY = 20;
+                }
+                
+                currentX = 8 + spacing;
+            }
+            
+            try {
+                doc.addImage(fotos[i].data, 'PNG', currentX, currentY, imgWidth, imgHeight);
+            } catch (e) {
+                console.error('Erro ao adicionar imagem:', e);
+            }
+            
+            currentX += imgWidth + spacing;
+            photoCount++;
+        }
+        
+        y = currentY + imgHeight + 8;
+    }
+    
+    if (y + 35 > pageHeight) {
+        doc.addPage();
+        y = 20;
+    }
+    
+    const signatureWidth = 50;
+    const signatureHeight = 25;
+    const spacing = (pageWidth - (signatureWidth * 2)) / 3;
+    
+    if (assinaturas && assinaturas.tecnico) {
+        try {
+            doc.addImage(assinaturas.tecnico, 'PNG', spacing, y, signatureWidth, signatureHeight);
+        } catch (e) {
+            console.error('Erro ao adicionar assinatura do técnico:', e);
+        }
+    }
+    
+    if (assinaturas && assinaturas.cliente) {
+        try {
+            doc.addImage(assinaturas.cliente, 'PNG', spacing * 2 + signatureWidth, y, signatureWidth, signatureHeight);
+        } catch (e) {
+            console.error('Erro ao adicionar assinatura do cliente:', e);
+        }
+    }
+    
+    y += signatureHeight + 2;
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
+    doc.line(spacing, y, spacing + signatureWidth, y);
+    doc.line(spacing * 2 + signatureWidth, y, spacing * 2 + signatureWidth * 2, y);
+    
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.text('TÉCNICO', spacing + signatureWidth / 2, y + 3, { align: 'center' });
+    doc.text('CLIENTE', spacing * 2 + signatureWidth + signatureWidth / 2, y + 3, { align: 'center' });
+    
+    // RETORNA BASE64 ao invés de fazer download
+    return doc.output('datauristring');
 }
 
 // ======== FUNÇÃO AUXILIAR PARA CARREGAR IMAGEM ========
@@ -2178,23 +2204,38 @@ async function attemptSync(isManual = false) {
 // ======== SINCRONIZAÇÃO INDIVIDUAL DE FORMULÁRIO ========
 async function syncSingleForm(form) {
     try {
+        console.log('🔄 Gerando PDFs para sincronização...');
+        
+        // Gera os dois PDFs em Base64
+        const fichaPDFBase64 = await gerarFichaPDFBase64(
+            form.formData, 
+            form.materiais, 
+            form.fotos, 
+            form.assinaturas
+        );
+        
+        const relatorioPDFBase64 = await gerarRelatorioPDFBase64(
+            form.formData, 
+            form.materiais, 
+            form.fotos, 
+            form.assinaturas
+        );
+        
+        console.log('✅ PDFs gerados com sucesso');
+        
+        // Payload simplificado com apenas os PDFs e dados essenciais
         const payload = {
-            json_dados: {
-                id: form.id,
-                createdAt: form.createdAt,
-                cliente: form.cliente,
-                servico: form.servico,
-                formData: form.formData,
-                materiais: form.materiais,
-                // Nota: Fotos e assinaturas são dados grandes, 
-                // pode ser necessário tratamento especial
-                hasFotos: form.fotos && form.fotos.length > 0,
-                hasAssinaturas: form.assinaturas && 
-                    (form.assinaturas.cliente || form.assinaturas.tecnico),
-				chaveUnica: form.chaveUnica
-            },
-            chave: form.chaveUnica
+            chave: form.chaveUnica,
+            cliente: form.cliente,
+            servico: form.servico,
+            data: form.createdAt,
+            fichaPDF: fichaPDFBase64,
+            relatorioPDF: relatorioPDFBase64
         };
+        
+        console.log('📤 Enviando PDFs para o servidor...');
+        console.log('Tamanho da Ficha:', (fichaPDFBase64.length / 1024).toFixed(2), 'KB');
+        console.log('Tamanho do Relatório:', (relatorioPDFBase64.length / 1024).toFixed(2), 'KB');
         
         const response = await fetch(SYNC_CONFIG.endpoint, {
             method: 'POST',
@@ -2209,11 +2250,11 @@ async function syncSingleForm(form) {
         }
         
         const result = await response.json();
-        console.log('Formulário sincronizado:', form.id, result);
+        console.log('✅ Formulário sincronizado:', form.id, result);
         
         return true;
     } catch (error) {
-        console.error('Erro ao sincronizar formulário:', error);
+        console.error('❌ Erro ao sincronizar formulário:', error);
         return false;
     }
 }
