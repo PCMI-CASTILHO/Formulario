@@ -2,15 +2,12 @@ importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 importScripts('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
 importScripts('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js');
 
-// Nome do cache – altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v303';
+const CACHE_NAME = 'formulario-cache-v304';
 
-// Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
-  'https://pcmi-castilho.github.io/Formulario/',
-  'https://pcmi-castilho.github.io/Formulario/index.html',
-  'https://pcmi-castilho.github.io/Formulario/manifest.json',
-  // CDNs externos que você usa
+  'https://servicos.pesoexato.com/',
+  'https://servicos.pesoexato.com/index.html',
+  'https://servicos.pesoexato.com/manifest.json',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
@@ -18,17 +15,17 @@ const ASSETS_TO_CACHE = [
   'https://cdn.jsdelivr.net/npm/idb@8/build/umd.js'
 ];
 
-// Instalação - cache dos arquivos essenciais
+// Instalação
 self.addEventListener('install', (event) => {
   console.log('🟢 Service Worker: Instalando...');
   
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('📦 Service Worker: Cacheando arquivos essenciais');
+        console.log('📦 Service Worker: Cacheando arquivos');
         return cache.addAll([
-          'https://pcmi-castilho.github.io/Formulario/',
-          'https://pcmi-castilho.github.io/Formulario/index.html'
+          'https://servicos.pesoexato.com/',
+          'https://servicos.pesoexato.com/index.html'
         ]).catch(error => {
           console.warn('⚠️ Alguns arquivos não puderam ser cacheados:', error);
         });
@@ -40,7 +37,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Ativação - limpa caches antigos
+// Ativação
 self.addEventListener('activate', (event) => {
   console.log('🔵 Service Worker: Ativando...');
   
@@ -61,21 +58,18 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Interceptação de requisições - ESTRATÉGIA INTELIGENTE
+// Interceptação de requisições
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   
-  // Ignora requisições não-GET
   if (event.request.method !== 'GET') return;
   
-  // Para APIs de sincronização, sempre vai para rede
   if (url.hostname === 'vps.pesoexato.com') {
     event.respondWith(fetch(event.request));
     return;
   }
   
-  // Para CDNs externas, tenta cache primeiro, depois rede
-  if (url.hostname !== 'pcmi-castilho.github.io') {
+  if (url.hostname !== 'servicos.pesoexato.com') {
     event.respondWith(
       caches.match(event.request)
         .then(cached => cached || fetch(event.request))
@@ -83,7 +77,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // Para recursos do próprio site
   event.respondWith(
     caches.match(event.request)
       .then((cachedResponse) => {
@@ -106,7 +99,7 @@ self.addEventListener('fetch', (event) => {
             
             if (event.request.destination === 'document' || 
                 event.request.mode === 'navigate') {
-              return caches.match('https://pcmi-castilho.github.io/Formulario/index.html')
+              return caches.match('https://servicos.pesoexato.com/index.html')
                 .then(html => html || criarPaginaOffline());
             }
             
@@ -116,7 +109,7 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Página offline customizada
+// Página offline
 function criarPaginaOffline() {
   const html = `
 <!DOCTYPE html>
@@ -124,7 +117,7 @@ function criarPaginaOffline() {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Modo Offline - Serviço Selaves</title>
+    <title>Modo Offline</title>
     <style>
         body { 
             font-family: 'Inter', sans-serif; 
@@ -144,41 +137,23 @@ function criarPaginaOffline() {
             text-align: center;
             max-width: 500px;
         }
-        .offline-icon {
-            font-size: 80px;
-            color: #667eea;
-            margin-bottom: 20px;
-        }
-        h1 {
-            color: #333;
-            margin-bottom: 15px;
-        }
-        p {
-            color: #666;
-            line-height: 1.6;
-            margin-bottom: 20px;
-        }
+        h1 { color: #333; margin-bottom: 15px; }
+        p { color: #666; line-height: 1.6; }
         .btn {
             background: #667eea;
             color: white;
             padding: 12px 30px;
             border: none;
             border-radius: 10px;
-            font-size: 16px;
             cursor: pointer;
-            transition: background 0.3s;
-        }
-        .btn:hover {
-            background: #5a6fd8;
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
     <div class="offline-container">
-        <div class="offline-icon">📶</div>
-        <h1>Você está offline</h1>
-        <p>O aplicativo de formulários de serviço continua funcionando, mas algumas funcionalidades que requerem internet estarão temporariamente indisponíveis.</p>
-        <p>Você pode continuar preenchendo formulários e eles serão sincronizados automaticamente quando a conexão voltar.</p>
+        <h1>📶 Você está offline</h1>
+        <p>Os formulários continuam funcionando e serão sincronizados quando a conexão voltar.</p>
         <button class="btn" onclick="window.location.reload()">Tentar Novamente</button>
     </div>
 </body>
@@ -189,15 +164,10 @@ function criarPaginaOffline() {
   });
 }
 
-// ======== BACKGROUND SYNC - SINCRONIZAÇÃO EM BACKGROUND ========
-self.addEventListener('sync', (event) => {
-    if (event.tag === 'background-sync-formularios') {
-        console.log('🔄 Background Sync disparado!');
-        event.waitUntil(sincronizarFormulariosEmBackground());
-    }
-});
+// ============================================
+// FUNÇÕES AUXILIARES PARA GERAÇÃO DE PDF
+// ============================================
 
-// ======== FUNÇÕES AUXILIARES PARA GERAÇÃO DE PDF NO SW ========
 function formatDate(dateString) {
     if (!dateString) return '-';
     const date = new Date(dateString);
@@ -207,30 +177,13 @@ function formatDate(dateString) {
     return `${day}/${month}/${year}`;
 }
 
-async function carregarImagemSW(src) {
-    try {
-        const response = await fetch(src);
-        const blob = await response.blob();
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-    } catch (error) {
-        console.warn('Erro ao carregar imagem no SW:', error);
-        return null;
-    }
-}
-
 async function gerarFichaPDFBase64SW(formData, materiais, fotos, assinaturas) {
     const { jsPDF } = self.jspdf;
     const doc = new jsPDF("p", "mm", "a4");
     const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
     let y = 20;
 
-    // Logo e cabeçalho
+    // Cabeçalho
     doc.setFillColor(0, 82, 163);
     doc.rect(0, 0, pageWidth, 17, 'F');
     
@@ -460,6 +413,7 @@ async function gerarRelatorioPDFBase64SW(formData, materiais, fotos, assinaturas
     doc.text(lines, margin, y + 2);
     y += textHeight + 10;
     
+    // FOTOS
     if (fotos && fotos.length > 0) {
         if (y + 50 > pageHeight) {
             doc.addPage();
@@ -472,17 +426,16 @@ async function gerarRelatorioPDFBase64SW(formData, materiais, fotos, assinaturas
         doc.text('FOTOS DO SERVIÇO', 10, y);
         y += 6;
         
-        const numFotos = fotos.length;
-        let imgWidth = 40;
-        let imgHeight = 30;
-        let imgsPerRow = 4;
+        const imgWidth = 40;
+        const imgHeight = 30;
+        const imgsPerRow = 4;
         
         const spacing = (pageWidth - 16 - (imgWidth * imgsPerRow)) / (imgsPerRow + 1);
         let currentX = 8 + spacing;
         let currentY = y;
         let photoCount = 0;
         
-        for (let i = 0; i < numFotos; i++) {
+        for (let i = 0; i < fotos.length; i++) {
             if (photoCount > 0 && photoCount % imgsPerRow === 0) {
                 currentY += imgHeight + 6;
                 
@@ -495,7 +448,7 @@ async function gerarRelatorioPDFBase64SW(formData, materiais, fotos, assinaturas
             }
             
             try {
-                doc.addImage(fotos[i].data, 'PNG', currentX, currentY, imgWidth, imgHeight);
+                doc.addImage(fotos[i].data, 'JPEG', currentX, currentY, imgWidth, imgHeight);
             } catch (e) {
                 console.error('Erro ao adicionar imagem:', e);
             }
@@ -547,27 +500,37 @@ async function gerarRelatorioPDFBase64SW(formData, materiais, fotos, assinaturas
     return doc.output('datauristring');
 }
 
-// ======== SINCRONIZAÇÃO PRINCIPAL EM BACKGROUND ========
+// ============================================
+// BACKGROUND SYNC - GERAÇÃO E ENVIO DOS PDFs
+// ============================================
+
+self.addEventListener('sync', (event) => {
+    if (event.tag === 'background-sync-formularios') {
+        console.log('🔄 Background Sync disparado!');
+        event.waitUntil(sincronizarFormulariosEmBackground());
+    }
+});
+
 async function sincronizarFormulariosEmBackground() {
     try {
-        console.log('🔄 Iniciando sincronização em background...');
+        console.log('📱 Iniciando sincronização em background...');
         
         const db = await idb.openDB('FormulariosDB', 4);
         const todosForms = await db.getAll('formularios');
         const pendentes = todosForms.filter(f => !f.sincronizado);
         
-        console.log(`📋 Encontrados ${pendentes.length} formulários pendentes`);
+        console.log(`📋 ${pendentes.length} formulários pendentes`);
         
         if (pendentes.length === 0) {
-            console.log('✅ Nenhum formulário pendente para sincronizar');
+            console.log('✅ Nenhum formulário pendente');
             return;
         }
         
         for (const form of pendentes) {
             try {
-                console.log(`📄 Gerando PDFs para formulário ${form.id}...`);
+                console.log(`🔄 Processando formulário ${form.id}...`);
                 
-                // Gera os dois PDFs em Base64
+                // Gerar PDFs
                 const fichaPDFBase64 = await gerarFichaPDFBase64SW(
                     form.formData, 
                     form.materiais, 
@@ -582,9 +545,9 @@ async function sincronizarFormulariosEmBackground() {
                     form.assinaturas
                 );
                 
-                console.log('✅ PDFs gerados com sucesso');
+                console.log('✅ PDFs gerados no SW');
                 
-                // Payload com o novo formato
+                // Enviar para servidor
                 const payload = {
                     chave: form.chaveUnica,
                     cliente: form.cliente,
@@ -594,7 +557,7 @@ async function sincronizarFormulariosEmBackground() {
                     relatorioPDF: relatorioPDFBase64
                 };
                 
-                console.log(`📤 Enviando formulário ${form.id} para o servidor...`);
+                console.log(`📤 Enviando formulário ${form.id}...`);
                 
                 const response = await fetch('https://vps.pesoexato.com/servico_set', {
                     method: 'POST',
@@ -606,9 +569,9 @@ async function sincronizarFormulariosEmBackground() {
                     form.sincronizado = true;
                     form.syncedAt = new Date().toISOString();
                     await db.put('formularios', form);
-                    console.log(`✅ Formulário ${form.id} sincronizado com sucesso`);
+                    console.log(`✅ Formulário ${form.id} sincronizado`);
                 } else {
-                    console.error(`❌ Erro HTTP ao sincronizar ${form.id}: ${response.status}`);
+                    console.error(`❌ Erro HTTP ${response.status} ao sincronizar ${form.id}`);
                 }
                 
             } catch (error) {
@@ -620,6 +583,6 @@ async function sincronizarFormulariosEmBackground() {
         
     } catch (error) {
         console.error('❌ Erro crítico no Background Sync:', error);
-        throw error; // Permite retry automático do Background Sync
+        throw error;
     }
 }
