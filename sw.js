@@ -3,7 +3,7 @@ importScripts('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.
 importScripts('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js');
 
 // Nome do cache – altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v301';
+const CACHE_NAME = 'formulario-cache-v302';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
@@ -224,7 +224,7 @@ async function carregarImagemSW(src) {
 }
 
 async function gerarFichaPDFBase64SW(formData, materiais, fotos, assinaturas) {
-    const { jsPDF } = window.jspdf;
+    const { jsPDF } = self.jspdf;
     const doc = new jsPDF("p", "mm", "a4");
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -357,7 +357,7 @@ async function gerarFichaPDFBase64SW(formData, materiais, fotos, assinaturas) {
 }
 
 async function gerarRelatorioPDFBase64SW(formData, materiais, fotos, assinaturas) {
-    const { jsPDF } = window.jspdf;
+    const { jsPDF } = self.jspdf;
     const doc = new jsPDF("p", "mm", "a4");
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
