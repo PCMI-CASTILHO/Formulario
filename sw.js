@@ -1,11 +1,10 @@
 /* ==========================================================
    SERVICE WORKER – OTIMIZADO PARA PWA + BACKGROUND SYNC
-   Compatível com envio de PDFs grandes e API externa
    ========================================================== */
 
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 
-const CACHE_NAME = 'formulario-cache-v200';
+const CACHE_NAME = 'formulario-cache-v202';
 
 const ASSETS = [
   './',
@@ -20,64 +19,51 @@ const ASSETS = [
   'https://cdn.jsdelivr.net/npm/idb@8/build/umd.js'
 ];
 
-/* ==========================================================
-   INSTALAÇÃO
-   ========================================================== */
 self.addEventListener('install', event => {
-  console.log('🟢 Instalando Service Worker v200');
-
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(ASSETS)
-        .catch(err => console.warn("⚠️ Erro ao cachear arquivos:", err));
-    }).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
+      .catch(err => console.warn("Erro ao cachear:", err))
+      .then(() => self.skipWaiting())
   );
 });
 
-/* ==========================================================
-   ATIVAÇÃO
-   ========================================================== */
 self.addEventListener('activate', event => {
-  console.log('🔵 Ativando SW e limpando caches antigos…');
-
   event.waitUntil(
     caches.keys().then(names =>
-      Promise.all(
-        names.map(name => {
-          if (name !== CACHE_NAME) {
-            console.log('🗑️ Apagando cache antigo:', name);
-            return caches.delete(name);
-          }
-        })
-      )
+      Promise.all(names.map(name => {
+        if (name !== CACHE_NAME) return caches.delete(name);
+      }))
     ).then(() => self.clients.claim())
   );
 });
 
 /* ==========================================================
-   INTERCEPTAÇÃO DE REQUISIÇÕES
+   FETCH – CORRIGIDO (clone antes de usar)
    ========================================================== */
+
 self.addEventListener('fetch', event => {
   const req = event.request;
 
-  // 🚫 Não interceptar POST, PUT, DELETE — deixa ir direto para a internet
+  // Não intercepta POST
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
 
-  // 🚫 Não interceptar chamadas para seu servidor real (IMPORTANTE!)
+  // Não intercepta API do servidor real
   if (url.hostname === 'vps.pesoexato.com') return;
 
-  // Estratégia cache → rede → fallback offline
   event.respondWith(
     caches.match(req).then(cacheRes => {
       if (cacheRes) return cacheRes;
 
       return fetch(req)
         .then(netRes => {
+          const clone = netRes.clone();
+
           if (netRes.ok && req.url.startsWith(location.origin)) {
-            caches.open(CACHE_NAME).then(cache => cache.put(req, netRes.clone()));
+            caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
           }
+
           return netRes;
         })
         .catch(() => {
@@ -92,20 +78,17 @@ self.addEventListener('fetch', event => {
 /* ==========================================================
    BACKGROUND SYNC
    ========================================================== */
+
 self.addEventListener('sync', event => {
   if (event.tag === 'background-sync-formularios') {
-    console.log("📡 Background Sync disparado!");
     event.waitUntil(sincronizarFormularios());
   }
 });
 
-/* ==========================================================
-   FUNÇÃO DE SINCRONIZAÇÃO REAL
-   ========================================================== */
 async function sincronizarFormularios() {
   try {
     const db = await idb.openDB('FormulariosDB', 4);
-    const store = db.transaction('formularios').store;
+    const store = db.transaction('formularios', 'readwrite').store;
 
     const todos = await store.getAll();
     const pendentes = todos.filter(f => !f.sincronizado);
@@ -121,7 +104,6 @@ async function sincronizarFormularios() {
 
       console.log(`📨 Enviando formulário ${form.id}`);
 
-      // ⚠️ CORREÇÃO CRÍTICA: salvar o response!
       const response = await fetch('https://vps.pesoexato.com/servico_set', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -129,14 +111,12 @@ async function sincronizarFormularios() {
       });
 
       if (response.ok) {
-        console.log(`✅ Formulário ${form.id} sincronizado`);
-
         form.sincronizado = true;
         form.syncedAt = new Date().toISOString();
-
-        await db.put('formularios', form);
+        await store.put(form);
+        console.log(`✅ Formulário ${form.id} sincronizado`);
       } else {
-        console.error(`❌ Falha ao sincronizar ${form.id}`, response.status);
+        console.error(`❌ Erro no servidor: ${response.status}`);
       }
     }
   } catch (err) {
