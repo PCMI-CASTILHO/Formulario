@@ -863,45 +863,83 @@ let syncBtn, syncBadge, syncIcon;
             });
         }
 
-        function handleFileSelect(e) {
-            const files = e.target.files;
-            
-            if (state.fotos.length + files.length > 10) {
-                showNotification('Máximo de 10 arquivos permitidos', 'error');
-                return;
-            }
+				// ADICIONE ESTA FUNÇÃO ANTES de handleFileSelect (linha ~885)
+		async function comprimirImagem(dataUrl, maxWidth = 1200, quality = 0.8) {
+			return new Promise((resolve) => {
+				const img = new Image();
+				img.onload = () => {
+					const canvas = document.createElement('canvas');
+					let width = img.width;
+					let height = img.height;
+					
+					// Redimensionar mantendo proporção
+					if (width > maxWidth) {
+						height = (height * maxWidth) / width;
+						width = maxWidth;
+					}
+					
+					canvas.width = width;
+					canvas.height = height;
+					
+					const ctx = canvas.getContext('2d');
+					ctx.drawImage(img, 0, 0, width, height);
+					
+					// Converter para JPEG com qualidade 0.8
+					resolve(canvas.toDataURL('image/jpeg', quality));
+				};
+				img.src = dataUrl;
+			});
+		}
 
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                
-                // Remove a verificação de vídeo
-                if (!file.type.match('image.*')) {
-                    showNotification('Apenas imagens são permitidas', 'error');
-                    continue;
-                }
+		// SUBSTITUA a função handleFileSelect existente por esta:
+		async function handleFileSelect(e) {
+			const files = e.target.files;
+			
+			if (state.fotos.length + files.length > 10) {
+				showNotification('Máximo de 10 arquivos permitidos', 'error');
+				return;
+			}
 
-                const reader = new FileReader();
-                
-                reader.onload = (function(file) {
-                    return function(e) {
-                        const fileData = {
-                            name: file.name,
-                            type: file.type,
-                            data: e.target.result,
-                            timestamp: new Date().toISOString()
-                        };
-                        
-                        state.fotos.push(fileData);
-                        renderPhotoPreview(fileData);
-                        showNotification('Foto adicionada', 'success');
-                    };
-                })(file);
-                
-                reader.readAsDataURL(file);
-            }
-            
-            fotosInput.value = '';
-        }
+			for (let i = 0; i < files.length; i++) {
+				const file = files[i];
+				
+				if (!file.type.match('image.*')) {
+					showNotification('Apenas imagens são permitidas', 'error');
+					continue;
+				}
+
+				const reader = new FileReader();
+				
+				reader.onload = (function(file) {
+					return async function(e) {
+						try {
+							showNotification('Processando imagem...', 'info');
+							
+							// ✅ COMPRIMIR A IMAGEM
+							const imagemComprimida = await comprimirImagem(e.target.result, 1200, 0.8);
+							
+							const fileData = {
+								name: file.name,
+								type: 'image/jpeg', // Forçar JPEG
+								data: imagemComprimida, // ✅ Usar versão comprimida
+								timestamp: new Date().toISOString()
+							};
+							
+							state.fotos.push(fileData);
+							renderPhotoPreview(fileData);
+							showNotification('Foto adicionada e otimizada', 'success');
+						} catch (error) {
+							console.error('Erro ao processar imagem:', error);
+							showNotification('Erro ao processar imagem', 'error');
+						}
+					};
+				})(file);
+				
+				reader.readAsDataURL(file);
+			}
+			
+			fotosInput.value = '';
+		}
 
         function renderPhotoPreview(fileData) {
             const previewItem = document.createElement('div');
@@ -1218,15 +1256,27 @@ async function limparRegistrosAntigos(db) {
 
 // Salva o formulário no IndexedDB
 async function salvarFormularioLocal() {
-    // Estas funções precisam estar definidas no seu escopo global
-    // if (!validateForm()) return; 
-    // const f = collectFormData(); 
-
-    // **ASSUME-SE** que `validateForm()` e `collectFormData()` existem e são síncronas.
     if (!validateForm()) return;
     const f = collectFormData(); 
 
     const id = Date.now();
+
+    // ✅ GERAR OS PDFs ANTES DE SALVAR
+    console.log('🔄 Gerando PDFs...');
+    const fichaPDFBase64 = await gerarFichaPDFBase64(
+        f, 
+        state.materiais, 
+        state.fotos, 
+        state.assinaturas
+    );
+    
+    const relatorioPDFBase64 = await gerarRelatorioPDFBase64(
+        f, 
+        state.materiais, 
+        state.fotos, 
+        state.assinaturas
+    );
+    console.log('✅ PDFs gerados');
 
     const registro = {
         id: id, 
@@ -1234,43 +1284,33 @@ async function salvarFormularioLocal() {
         cliente: f.cliente || '',
         servico: f.servico || '',
         formData: f,
-        // Incluímos fotos e assinaturas.
         fotos: state.fotos || [], 
         materiais: state.materiais || [],
         assinaturas: state.assinaturas || {},
-		sincronizado: false,
-		syncedAt: null,
-		chaveUnica: generateUniqueKey()
+        sincronizado: false,
+        syncedAt: null,
+        chaveUnica: generateUniqueKey(),
+        // ✅ SALVAR OS PDFs NO INDEXEDDB
+        fichaPDF: fichaPDFBase64,
+        relatorioPDF: relatorioPDFBase64
     };
 
     try {
-    const db = await initDB();
-    
-    // 1. Salva o novo registro no IndexedDB
-    await db.put(STORE_NAME, registro);
+        const db = await initDB();
+        await db.put(STORE_NAME, registro);
+        await registrarBackgroundSync();
+        await updatePendingCount();
 
-    // ✅ REGISTRA BACKGROUND SYNC AQUI! (NOVA LINHA)
-    await registrarBackgroundSync();
-    
-    // Atualizar contagem de pendentes
-    await updatePendingCount();
+        if (navigator.onLine) {
+            setTimeout(() => attemptSync(), 1000);
+        }
 
-    // Tentar sincronizar automaticamente se online
-    if (navigator.onLine) {
-        setTimeout(() => attemptSync(), 1000);
-    }
-
-    showNotification('Formulário salvo localmente!', 'success');
-    
-    // 2. Renderiza a UI e garante a limpeza
-    await renderFormulariosSalvos();
-        
-        // 2. Renderiza a UI e garante a limpeza
+        showNotification('Formulário salvo localmente!', 'success');
         await renderFormulariosSalvos();
+        
     } catch (e) {
-        console.error("Erro ao salvar no IndexedDB:", e);
-        // QuotaExceededError pode acontecer até no IndexedDB, mas é raro
-        showNotification('Erro: Falha ao salvar no armazenamento local. Verifique a cota.', 'error');
+        console.error("Erro ao salvar:", e);
+        showNotification('Erro ao salvar formulário', 'error');
     }
 }
 
@@ -1508,7 +1548,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=27')
+                navigator.serviceWorker.register('./sw.js?v=307')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -1571,9 +1611,16 @@ async function gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas)
     }
 
     try {
-        await gerarFichaPDF(formData, materiais, fotos, assinaturas);
-        await gerarRelatorioPDF(formData, materiais, fotos, assinaturas);
-        showNotification("PDFs gerados com sucesso!", "success");
+        // Gera e faz download da Ficha
+        await gerarFichaPDFBase64(formData, materiais, fotos, assinaturas);
+        
+        // Pequeno delay entre downloads
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Gera e faz download do Relatório
+        await gerarRelatorioPDFBase64(formData, materiais, fotos, assinaturas);
+        
+        showNotification("PDFs baixados com sucesso!", "success");
     } catch (e) {
         console.error("Erro ao gerar PDFs:", e);
         showNotification("Erro ao gerar PDFs", "error");
@@ -1591,7 +1638,8 @@ function formatDate(dateString) {
 }
 
 // ======== FICHA DE MANUTENÇÃO ========
-async function gerarFichaPDF(formData, materiais, fotos, assinaturas) {
+// Versão modificada que retorna Base64 ao invés de fazer download
+async function gerarFichaPDFBase64(formData, materiais, fotos, assinaturas) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF("p", "mm", "a4");
     const logo = await carregarImagem("Logo.png");
@@ -1602,10 +1650,9 @@ async function gerarFichaPDF(formData, materiais, fotos, assinaturas) {
     // Logo e cabeçalho
     doc.setFillColor(0, 82, 163);
     doc.rect(0, 0, pageWidth, 17, 'F');
-	
+    
     if (logo) doc.addImage(logo, "PNG", 10, 1.5, 30, 15);
     
-
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
@@ -1752,11 +1799,12 @@ async function gerarFichaPDF(formData, materiais, fotos, assinaturas) {
     doc.text('TÉCNICO', spacing + signatureWidth / 2, y + 3, { align: 'center' });
     doc.text('CLIENTE', spacing * 2 + signatureWidth + signatureWidth / 2, y + 3, { align: 'center' });
     
-    doc.save(`Ficha_Manutencao_${formData.cliente || 'ficha'}.pdf`);
+    doc.save('Ficha_Manutencao.pdf');
+    return doc.output('datauristring');
 }
 
-// ======== RELATÓRIO DE PRESTAÇÃO DE SERVIÇO ========
-async function gerarRelatorioPDF(formData, materiais, fotos, assinaturas) {
+// Versão modificada do Relatório que retorna Base64
+async function gerarRelatorioPDFBase64(formData, materiais, fotos, assinaturas) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF("p", "mm", "a4");
     const logo = await carregarImagem("Logo.png");
@@ -1767,7 +1815,7 @@ async function gerarRelatorioPDF(formData, materiais, fotos, assinaturas) {
     // Logo e cabeçalho
     doc.setFillColor(0, 82, 163);
     doc.rect(0, 0, pageWidth, 17, 'F');
-	
+    
     if (logo) doc.addImage(logo, "PNG", 10, 1.5, 30, 15);
     
     doc.setTextColor(255, 255, 255);
@@ -1980,8 +2028,8 @@ async function gerarRelatorioPDF(formData, materiais, fotos, assinaturas) {
     doc.text('TÉCNICO', spacing + signatureWidth / 2, y + 3, { align: 'center' });
     doc.text('CLIENTE', spacing * 2 + signatureWidth + signatureWidth / 2, y + 3, { align: 'center' });
     
-    const nome = (formData.cliente || 'relatorio').replace(/[^a-zA-Z0-9]/g, "_");
-    doc.save(`Relatorio_${nome}_${new Date().toISOString().split("T")[0]}.pdf`);
+    doc.save('Relatorio_Servico.pdf');
+    return doc.output('datauristring');
 }
 
 // ======== FUNÇÃO AUXILIAR PARA CARREGAR IMAGEM ========
@@ -2196,42 +2244,45 @@ async function attemptSync(isManual = false) {
 // ======== SINCRONIZAÇÃO INDIVIDUAL DE FORMULÁRIO ========
 async function syncSingleForm(form) {
     try {
+        console.log('📤 Enviando formulário:', form.id);
+        
+        // ✅ OS PDFs JÁ ESTÃO SALVOS NO FORMULÁRIO
         const payload = {
-            json_dados: {
-                id: form.id,
-                createdAt: form.createdAt,
-                cliente: form.cliente,
-                servico: form.servico,
-                formData: form.formData,
-                materiais: form.materiais,
-                // Nota: Fotos e assinaturas são dados grandes, 
-                // pode ser necessário tratamento especial
-                hasFotos: form.fotos && form.fotos.length > 0,
-                hasAssinaturas: form.assinaturas && 
-                    (form.assinaturas.cliente || form.assinaturas.tecnico),
-				chaveUnica: form.chaveUnica
-            },
-            chave: form.chaveUnica
-        };
+            id: form.id,
+            cliente: form.cliente,
+            servico: form.servico,
+            formData: form.formData,
+            fichaPDF: form.fichaPDF,
+            relatorioPDF: form.relatorioPDF,
+			chaveUnica: form.chaveUnica
+        },
+		chave: form.chaveUnica
+	};
+        
+        const payloadSize = JSON.stringify(payload).length;
+        const payloadSizeMB = (payloadSize / 1024 / 1024).toFixed(2);
+        
+        console.log(`📦 Tamanho: ${payloadSizeMB}MB`);
+        
+        if (payloadSize > 50 * 1024 * 1024) {
+            throw new Error(`Payload muito grande: ${payloadSizeMB}MB`);
+        }
         
         const response = await fetch(SYNC_CONFIG.endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
         
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            throw new Error(`HTTP ${response.status}`);
         }
         
-        const result = await response.json();
-        console.log('Formulário sincronizado:', form.id, result);
-        
+        console.log('✅ Sincronizado:', form.id);
         return true;
+        
     } catch (error) {
-        console.error('Erro ao sincronizar formulário:', error);
+        console.error('❌ Erro:', error);
         return false;
     }
 }
