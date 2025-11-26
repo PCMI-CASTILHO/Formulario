@@ -1547,7 +1547,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=503')
+                navigator.serviceWorker.register('./sw.js?v=504')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -2089,7 +2089,6 @@ function carregarImagem(src) {
             link.download = `servico_${cliente}_${data}.json`;
             
             document.body.appendChild(link);
-            link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
             
