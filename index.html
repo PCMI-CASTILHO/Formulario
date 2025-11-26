@@ -864,30 +864,28 @@ let syncBtn, syncBadge, syncIcon;
         }
 
 				// ADICIONE ESTA FUNÇÃO ANTES de handleFileSelect (linha ~885)
-		async function comprimirImagem(dataUrl, maxWidth = 1200, quality = 0.8) {
-			return new Promise((resolve) => {
+		async function compressImage(base64, maxWidth = 1280, quality = 0.7) {
+			return new Promise(resolve => {
 				const img = new Image();
 				img.onload = () => {
 					const canvas = document.createElement('canvas');
-					let width = img.width;
-					let height = img.height;
-					
-					// Redimensionar mantendo proporção
-					if (width > maxWidth) {
-						height = (height * maxWidth) / width;
-						width = maxWidth;
+
+					const ratio = img.width / img.height;
+					if (img.width > maxWidth) {
+						canvas.width = maxWidth;
+						canvas.height = maxWidth / ratio;
+					} else {
+						canvas.width = img.width;
+						canvas.height = img.height;
 					}
-					
-					canvas.width = width;
-					canvas.height = height;
-					
+
 					const ctx = canvas.getContext('2d');
-					ctx.drawImage(img, 0, 0, width, height);
-					
-					// Converter para JPEG com qualidade 0.8
-					resolve(canvas.toDataURL('image/jpeg', quality));
+					ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+					const compressed = canvas.toDataURL('image/jpeg', quality);
+					resolve(compressed);
 				};
-				img.src = dataUrl;
+				img.src = base64;
 			});
 		}
 
@@ -916,7 +914,7 @@ let syncBtn, syncBadge, syncIcon;
 							showNotification('Processando imagem...', 'info');
 							
 							// ✅ COMPRIMIR A IMAGEM
-							const imagemComprimida = await comprimirImagem(e.target.result, 1200, 0.8);
+							const imagemComprimida = await compressImage(e.target.result, 1200, 0.8);
 							
 							const fileData = {
 								name: file.name,
@@ -1549,7 +1547,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=400')
+                navigator.serviceWorker.register('./sw.js?v=401')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -1979,11 +1977,23 @@ async function gerarRelatorioPDFBase64(formData, materiais, fotos, assinaturas) 
                 currentX = 8 + spacing;
             }
             
-            try {
-                doc.addImage(fotos[i].data, 'PNG', currentX, currentY, imgWidth, imgHeight);
-            } catch (e) {
-                console.error('Erro ao adicionar imagem:', e);
-            }
+			try {
+				// 📌 1. Recompressão da imagem ESPECÍFICA PARA PDF
+				const compressedImage = await compressImage(fotos[i].data, 1400, 0.65);
+
+				// 📌 2. Adicionar imagem já comprimida
+				doc.addImage(
+					compressedImage,
+					'JPEG',
+					currentX,
+					currentY,
+					imgWidth,
+					imgHeight
+				);
+
+			} catch (e) {
+				console.error('Erro ao adicionar imagem comprimida:', e);
+			}
             
             currentX += imgWidth + spacing;
             photoCount++;
