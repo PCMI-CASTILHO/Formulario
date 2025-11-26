@@ -1,6 +1,6 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 
-const CACHE_NAME = 'formulario-cache-v305';
+const CACHE_NAME = 'formulario-cache-v306';
 
 const ASSETS_TO_CACHE = [
   'https://servicos.pesoexato.com/',
@@ -186,14 +186,17 @@ async function sincronizarFormulariosEmBackground() {
                 // ✅ OS PDFs JÁ ESTÃO NO FORMULÁRIO (gerados no index.html)
                 // Apenas pegamos os dados e enviamos
                 const payload = {
-                    chave: form.chaveUnica,
-                    cliente: form.cliente,
-                    servico: form.servico,
-                    data: form.createdAt,
+					id: form.id,
+					cliente: form.cliente,
+					servico: form.servico,
+					formData: form.formData,
                     // ✅ Verifica se os PDFs já foram gerados
                     fichaPDF: form.fichaPDF || null,
-                    relatorioPDF: form.relatorioPDF || null
-                };
+                    relatorioPDF: form.relatorioPDF || null,
+					chaveUnica: form.chaveUnica
+                },
+				chave: form.chaveUnica
+			};
                 
                 // Se os PDFs não existirem, notifica o cliente para gerá-los
                 if (!payload.fichaPDF || !payload.relatorioPDF) {
