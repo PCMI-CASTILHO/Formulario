@@ -1,11 +1,11 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 
-const CACHE_NAME = 'formulario-cache-v307';
+const CACHE_NAME = 'formulario-cache-v310';
 
 const ASSETS_TO_CACHE = [
-  'https://servicos.pesoexato.com/',
-  'https://servicos.pesoexato.com/index.html',
-  'https://servicos.pesoexato.com/manifest.json',
+  'https://pcmi-castilho.github.io/Formulario/',
+  'https://pcmi-castilho.github.io/Formulario/index.html',
+  'https://pcmi-castilho.github.io/Formulario/manifest.json',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
@@ -22,8 +22,8 @@ self.addEventListener('install', (event) => {
       .then((cache) => {
         console.log('📦 Cacheando arquivos');
         return cache.addAll([
-          'https://servicos.pesoexato.com/',
-          'https://servicos.pesoexato.com/index.html'
+          'https:https://pcmi-castilho.github.io/Formulario/',
+          'https:https://pcmi-castilho.github.io/Formulario/index.html'
         ]).catch(error => {
           console.warn('⚠️ Alguns arquivos não puderam ser cacheados:', error);
         });
@@ -89,7 +89,7 @@ self.addEventListener('fetch', (event) => {
             
             if (event.request.destination === 'document' || 
                 event.request.mode === 'navigate') {
-              return caches.match('https://servicos.pesoexato.com/index.html')
+              return caches.match('https://pcmi-castilho.github.io/Formulario/index.html')
                 .then(html => html || criarPaginaOffline());
             }
             
