@@ -1,6 +1,6 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 
-const CACHE_NAME = 'formulario-cache-v306';
+const CACHE_NAME = 'formulario-cache-v307';
 
 const ASSETS_TO_CACHE = [
   'https://servicos.pesoexato.com/',
