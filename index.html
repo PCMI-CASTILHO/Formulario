@@ -1547,7 +1547,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=502')
+                navigator.serviceWorker.register('./sw.js?v=503')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -2094,13 +2094,6 @@ function carregarImagem(src) {
             URL.revokeObjectURL(url);
             
             showNotification('Dados exportados com sucesso!', 'success');
-			setTimeout(() => {
-				try {
-					gerarPDFsAutomaticamente(formData, state.materiais, state.fotos, state.assinaturas);
-				} catch (err) {
-					console.error('Erro ao gerar PDFs:', err);
-				}
-			}, 500);
         }
 
         function showNotification(message, type) {
