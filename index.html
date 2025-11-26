@@ -1284,12 +1284,13 @@ async function salvarFormularioLocal() {
         cliente: f.cliente || '',
         servico: f.servico || '',
         formData: f,
+        // Incluímos fotos e assinaturas.
         fotos: state.fotos || [], 
         materiais: state.materiais || [],
         assinaturas: state.assinaturas || {},
-        sincronizado: false,
-        syncedAt: null,
-        chaveUnica: generateUniqueKey(),
+		sincronizado: false,
+		syncedAt: null,
+		chaveUnica: generateUniqueKey(),
         // ✅ SALVAR OS PDFs NO INDEXEDDB
         fichaPDF: fichaPDFBase64,
         relatorioPDF: relatorioPDFBase64
@@ -1420,7 +1421,7 @@ async function carregarFormularioLocal(id) {
     try {
         const db = await initDB();
         // 'get' busca um registro pela chave primária (id)
-        const registro = await db.get(STORE_NAME, Number(id)); 
+        const registro = await db.get(STORE_NAME, Number(id));
 
         if (!registro) {
             showNotification('Registro não encontrado', 'error');
@@ -1548,7 +1549,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=310')
+                navigator.serviceWorker.register('./sw.js?v=320')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -2247,17 +2248,15 @@ async function syncSingleForm(form) {
         console.log('📤 Enviando formulário:', form.id);
         
         // ✅ OS PDFs JÁ ESTÃO SALVOS NO FORMULÁRIO
-        const payload = {
-            id: form.id,
-            cliente: form.cliente,
-            servico: form.servico,
-            formData: form.formData,
-            fichaPDF: form.fichaPDF,
-            relatorioPDF: form.relatorioPDF,
-			chaveUnica: form.chaveUnica
-        },
-		chave: form.chaveUnica
-	};
+		const payload = {
+            json_dados: {
+                id: form.id,
+				fichaPDF: form.fichaPDF,
+                relatorioPDF: form.relatorioPDF,
+                chaveUnica: form.chaveUnica
+            },
+            chave: form.chaveUnica
+        };
         
         const payloadSize = JSON.stringify(payload).length;
         const payloadSizeMB = (payloadSize / 1024 / 1024).toFixed(2);
