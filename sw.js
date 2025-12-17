@@ -6,7 +6,7 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 
 // Nome do cache — altere ao atualizar
-const CACHE_NAME = 'formulario-cache-v504';
+const CACHE_NAME = 'formulario-cache-v505';
 
 // Arquivos ESSENCIAIS (mínimos)
 const CORE_ASSETS = [
@@ -138,36 +138,44 @@ async function sincronizarPendentes() {
         const db = await idb.openDB('FormulariosDB', 4);
         const forms = await db.getAll('formularios');
 
-        const pendentes = forms.filter(f => !f.sincronizado);
+        // 🔴 Pega APENAS UM formulário pendente
+        const form = forms.find(f => !f.sincronizado);
 
-        console.log(`🔄 Sincronizando ${pendentes.length} pendentes...`);
-
-        for (const form of pendentes) {
-            const payload = {
-                json_dados: {
-                    id: form.id,
-                    fichaPDF: form.fichaPDF || null,
-                    relatorioPDF: form.relatorioPDF || null,
-                    chaveUnica: form.chaveUnica
-                },
-                chave: form.chaveUnica
-            };
-
-            const response = await fetch('https://vps.pesoexato.com/servico_set', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (response.ok) {
-                form.sincronizado = true;
-                form.syncedAt = new Date().toISOString();
-                await db.put('formularios', form);
-                console.log(`✅ Formulário ${form.id} sincronizado`);
-            } else {
-                console.warn(`⚠️ Falha ao sincronizar ${form.id}`);
-            }
+        if (!form) {
+            console.log('✅ Nenhum formulário pendente');
+            return;
         }
+
+        console.log(`🔄 Sincronizando formulário ${form.id}`);
+
+        const payload = {
+            json_dados: {
+                id: form.id,
+                fichaPDF: form.fichaPDF || null,
+                relatorioPDF: form.relatorioPDF || null,
+                chaveUnica: form.chaveUnica
+            },
+            chave: form.chaveUnica
+        };
+
+        const response = await fetch('https://vps.pesoexato.com/servico_set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            form.sincronizado = true;
+            form.syncedAt = new Date().toISOString();
+            await db.put('formularios', form);
+            console.log(`✅ Formulário ${form.id} sincronizado`);
+        } else {
+            console.warn(`⚠️ Falha ao sincronizar ${form.id}`);
+        }
+
+        // ⛔ IMPORTANTE: NÃO continua loop
+        // A próxima sincronização será OUTRA chamada
+
     } catch (err) {
         console.error('❌ Erro ao sincronizar:', err);
     }
