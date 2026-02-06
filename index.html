@@ -197,6 +197,11 @@
 					<span id="status-indicator" class="status-indicator status-offline"></span>
 					<span id="status-text">Offline</span>
 				</div>
+				<!-- Botão para bloquear sincronização automática -->
+				<button id="toggle-auto-sync-btn" class="btn-secondary px-4 py-2 rounded-lg flex items-center" aria-pressed="false" title="Alterna entre sincronização automática e manual">
+					<i class="fas fa-sync-alt mr-2"></i>
+					<span id="toggle-auto-sync-text">Auto Sync: Ativa</span>
+				</button>
 				<!-- Botão de sincronização de dados offline -->
 				<button id="sync-btn" class="btn-primary px-4 py-2 rounded-lg flex items-center relative">
 					<i class="fas fa-sync-alt mr-2"></i> Sincronizar
@@ -206,6 +211,10 @@
 				<!-- Botão de exportação de dados -->
 				<button id="export-btn" class="btn-primary px-4 py-2 rounded-lg flex items-center">
 					<i class="fas fa-download mr-2"></i> Salvar
+				</button>
+				<!-- Botão para limpar formulário -->
+				<button id="clear-form-btn" class="btn-secondary px-4 py-2 rounded-lg flex items-center text-red-600 border-red-200 hover:text-red-700">
+					<i class="fas fa-eraser mr-2"></i> Limpar Formulário
 				</button>
 			</div>
         </div>
@@ -690,13 +699,14 @@
 
         // Estado global da aplicação
 		// Armazena dados temporários antes do envio
-        let state = {
-            fotos: [],			// Array de fotos capturadas
-            materiais: [],		// Array de materiais utilizados
-            assinaturas: {		// Objeto para armazenar assinaturas
-                cliente: null,	// Data URL da assinatura do cliente
-                tecnico: null	// Data URL da assinatura do técnico
-            }
+	    let state = {
+	    	fotos: [],			// Array de fotos capturadas
+	        materiais: [],		// Array de materiais utilizados
+			formularioEmEdicaoId: null,	// ID do formulário em edição
+	        assinaturas: {		// Objeto para armazenar assinaturas
+	            cliente: null,	// Data URL da assinatura do cliente
+	            tecnico: null	// Data URL da assinatura do técnico
+	        }
         };
 
 		// ======== Configuração de Sincronização ========
@@ -707,6 +717,10 @@
 			maxRetention: 14 * 24 * 60 * 60 * 1000 // 2 semanas
 		};
 
+		const AUTO_SYNC_STORAGE_KEY = 'syncAutoBlocked';
+		const FORM_DRAFT_STORAGE_KEY = 'formularioDraft';
+		let draftSaveTimeout;
+		
 		// ======== Gerador de Chave Única ========
 		function generateUniqueKey() {
 			const timestamp = Date.now().toString(36);
@@ -717,6 +731,10 @@
 		// ======== Registro de Background Sync ========
 		// Utiliza API de sincronização em segundo plano quando disponível
 		async function registrarBackgroundSync() {
+			if (syncState.autoSyncBlocked) {
+				return false;
+			}
+			
 			// Verifica suporte do navegador para Background Sync API
 			if ('serviceWorker' in navigator && 'SyncManager' in window) {
 				try {
@@ -737,12 +755,13 @@
 		let syncState = {
 			pendingCount: 0,	// Contador de formulários pendentes de envio
 			isSyncing: false,	// Flag para evitar concorrência (mutex)
-			syncInterval: null	// Referência do intervalo de polling
+			syncInterval: null,	// Referência do intervalo de polling
+			autoSyncBlocked: false // Bloqueia sincronização automática
 		};
 
 		// ======== Elementos da interface ========
 		// Controla o estado atual das operações de sincronização
-		let syncBtn, syncBadge, syncIcon;
+		let syncBtn, syncBadge, syncIcon, toggleAutoSyncBtn, toggleAutoSyncText;
 
 		// Elementos DOM
 		// Cache de elementos para melhor performance
@@ -800,6 +819,7 @@
 			addFotosBtn.addEventListener('click', () => fotosInput.click());	// Trigger file input
 			fotosInput.addEventListener('change', handleFileSelect);			// Processar upload
 			addMaterialBtn.addEventListener('click', addMaterial);				// Adicionar material
+			document.getElementById('clear-form-btn').addEventListener('click', clearForm);
 			
 			// Atalho de teclado para adição de materiais
 			materialInput.addEventListener('keypress', (e) => {
@@ -831,6 +851,15 @@
 			if (document.getElementById('sync-btn')) {
 				document.getElementById('sync-btn').addEventListener('click', manualSync);
 			}
+			
+			if (document.getElementById('toggle-auto-sync-btn')) {
+				document.getElementById('toggle-auto-sync-btn').addEventListener('click', toggleAutoSyncMode);
+			}
+			
+			document.querySelectorAll('input, select, textarea').forEach(field => {
+				field.addEventListener('input', scheduleDraftSave);
+				field.addEventListener('change', scheduleDraftSave);
+			});
 		}
 		
 		// ======== Configuração Canvas ========
@@ -968,6 +997,7 @@
 		        ctxTecnico.clearRect(0, 0, canvasTecnico.width, canvasTecnico.height);
 		        state.assinaturas.tecnico = null;
 		    }
+			scheduleDraftSave();
 		    showNotification('Assinatura limpa', 'info');
 		}
 		
@@ -1051,6 +1081,7 @@
 							
 							state.fotos.push(fileData);				// Adiciona ao estado global
 							renderPhotoPreview(fileData);			// Atualiza UI
+							scheduleDraftSave();
 							showNotification('Foto adicionada e otimizada', 'success');
 						} catch (error) {
 							console.error('Erro ao processar imagem:', error);
@@ -1111,6 +1142,7 @@
         function deletePhoto(index) {
             state.fotos.splice(index, 1);	// Remove do array
             renderPhotos();					// Re-renderiza toda a galeria
+			scheduleDraftSave();
             showNotification('Arquivo removido', 'info');
         }
 		
@@ -1189,6 +1221,7 @@
             materialQtd.value = '';
 			
             renderMateriais();	// Atualiza UI
+			scheduleDraftSave();
             showNotification('Material adicionado', 'success');
         }
 		
@@ -1222,6 +1255,7 @@
                     const index = parseInt(this.getAttribute('data-index'));
                     state.materiais.splice(index, 1);	// Remove do estado
                     renderMateriais();					// Re-renderiza
+					scheduleDraftSave();
                     showNotification('Material removido', 'info');
                 });
             });
@@ -1249,6 +1283,98 @@
                 tecnicoNome: document.getElementById('tecnico-nome').value
             };
         }
+		
+		// ======== Rascunho do formulário (localStorage) ========
+		function scheduleDraftSave() {
+			clearTimeout(draftSaveTimeout);
+			draftSaveTimeout = setTimeout(saveDraftToStorage, 300);
+		}
+
+		function saveDraftToStorage() {
+			const draftData = {
+				formData: collectFormData(),
+				materiais: state.materiais,
+				fotos: state.fotos,
+				assinaturas: state.assinaturas
+			};
+
+			try {
+				localStorage.setItem(FORM_DRAFT_STORAGE_KEY, JSON.stringify(draftData));
+			} catch (error) {
+				console.warn('Não foi possível salvar o rascunho no armazenamento local:', error);
+				showNotification('Limite de armazenamento atingido. O rascunho não foi salvo.', 'error');
+			}
+		}
+
+		function loadDraftFromStorage() {
+			const rawDraft = localStorage.getItem(FORM_DRAFT_STORAGE_KEY);
+			if (!rawDraft) return;
+
+			try {
+				const draft = JSON.parse(rawDraft);
+				const formData = draft.formData || {};
+
+				for (const key in FIELD_ID_MAP) {
+					const elId = FIELD_ID_MAP[key];
+					const el = document.getElementById(elId);
+					if (!el) continue;
+
+					const value = formData[key] !== undefined ? formData[key] : '';
+					el.value = value;
+
+					if (elId === 'equipamento') {
+						equipamentoOutro.classList.toggle('hidden', el.value !== 'OUTRO');
+					}
+				}
+
+				state.materiais = Array.isArray(draft.materiais) ? draft.materiais : [];
+				state.fotos = Array.isArray(draft.fotos) ? draft.fotos : [];
+				state.assinaturas = draft.assinaturas || { cliente: null, tecnico: null };
+
+				renderMateriais();
+				renderPhotos();
+
+				if (state.assinaturas.cliente) {
+					drawDataUrlOnCanvas(state.assinaturas.cliente, canvasCliente, ctxCliente);
+				} else {
+					ctxCliente.clearRect(0, 0, canvasCliente.width, canvasCliente.height);
+				}
+
+				if (state.assinaturas.tecnico) {
+					drawDataUrlOnCanvas(state.assinaturas.tecnico, canvasTecnico, ctxTecnico);
+				} else {
+					ctxTecnico.clearRect(0, 0, canvasTecnico.width, canvasTecnico.height);
+				}
+			} catch (error) {
+				console.warn('Erro ao recuperar rascunho do formulário:', error);
+			}
+		}
+
+		function clearForm() {
+			for (const key in FIELD_ID_MAP) {
+				const elId = FIELD_ID_MAP[key];
+				const el = document.getElementById(elId);
+				if (!el) continue;
+				el.value = '';
+			}
+
+			equipamentoOutro.classList.add('hidden');
+			state.materiais = [];
+			state.fotos = [];
+			state.assinaturas = { cliente: null, tecnico: null };
+			state.formularioEmEdicaoId = null;
+
+			renderMateriais();
+			renderPhotos();
+			ctxCliente.clearRect(0, 0, canvasCliente.width, canvasCliente.height);
+			ctxTecnico.clearRect(0, 0, canvasTecnico.width, canvasTecnico.height);
+			fotosInput.value = '';
+			document.getElementById('lock-cliente').checked = false;
+			document.getElementById('lock-tecnico').checked = false;
+
+			localStorage.removeItem(FORM_DRAFT_STORAGE_KEY);
+			showNotification('Formulário limpo.', 'info');
+		}
 		
 		// Validação do formulário
         function validateForm() {
@@ -1427,14 +1553,21 @@
 			// Coleta dados do formulário
 			const f = collectFormData(); 
 			
-			// Geração de ID baseado em timestamp
-			const id = Date.now();
+			const db = await initDB();
+			const idEdicao = state.formularioEmEdicaoId ? Number(state.formularioEmEdicaoId) : null;
+			const registroExistente = idEdicao ? await db.get(STORE_NAME, idEdicao) : null;
+
+			// Mantém o mesmo ID quando estiver editando
+			const id = registroExistente ? registroExistente.id : Date.now();
+			const createdAt = registroExistente?.createdAt || new Date().toISOString();
+			const chaveUnica = registroExistente?.chaveUnica || generateUniqueKey();
 			
 			// ======== Estrutura do registro offline ========
 			const registro = {
 				// Metadados
 				id: id,
-				createdAt: new Date().toISOString(),
+				createdAt,
+				updatedAt: new Date().toISOString(),
 			
 				cliente: f.cliente,
 				cidade: f.cidade,
@@ -1462,27 +1595,31 @@
 			
 				sincronizado: false,
 				syncedAt: null,
-				chaveUnica: generateUniqueKey()
+				serverId: registroExistente?.serverId || null,
+				chaveUnica
 			};
 
 			try {
-				const db = await initDB();
-				
 				// Operação atômica de escrita
 				await db.put(STORE_NAME, registro);
+
+				// Mantém referência do registro atual para próximos saves
+				state.formularioEmEdicaoId = id;
 				
 				// Registra para sincronização em background
-				await registrarBackgroundSync();
+				if (!syncState.autoSyncBlocked) {
+					await registrarBackgroundSync();
+				}
 				
 				// Atualiza contador de pendências
 				await updatePendingCount();
 				
-				// Tenta sincronização imediata se online
-				if (navigator.onLine) {
+				// Tenta sincronização imediata se online (se modo automático estiver ativo)
+				if (navigator.onLine && !syncState.autoSyncBlocked) {
 					setTimeout(() => attemptSync(), 1000);
 				}
 
-				showNotification('Formulário salvo localmente!', 'success');
+				showNotification(registroExistente ? 'Formulário atualizado com sucesso!' : 'Formulário salvo localmente!', 'success');
 				await renderFormulariosSalvos();	// Atualiza UI
 				
 			} catch (e) {
@@ -1547,7 +1684,7 @@
 			// ======== Renderização de itens ========
 			registros.forEach(registro => {
 				// Formatação de data legível
-				const dataLegivel = new Date(registro.id).toLocaleDateString();
+				const dataLegivel = new Date(registro.id).toLocaleString('pt-BR');
 				
 				// Ícone de status baseado em sincronização
 				const statusIcon = registro.sincronizado 
@@ -1635,6 +1772,9 @@
 					return;
 				}
 
+				// Sinaliza modo de edição para evitar duplicação ao salvar
+				state.formularioEmEdicaoId = registro.id;
+
 				const f = registro;
 
 				// Usa FIELD_ID_MAP para mapeamento dinâmico
@@ -1685,6 +1825,7 @@
 				}
 
 				showNotification('Formulário carregado para edição.', 'info');
+				saveDraftToStorage();
 				
 				// Scroll para topo com animação
 				window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1842,11 +1983,12 @@
 				setupSignatureCanvas(canvasCliente, ctxCliente, 'cliente');	// Signature pad initialization
 				setupSignatureCanvas(canvasTecnico, ctxTecnico, 'tecnico');
 				populateMaterialsDatalist();								// Autocomplete data population
+				loadDraftFromStorage();										// Restaura rascunho local
 
 				// Fase 5: Service Worker registration (PWA capabilities)
 				if ('serviceWorker' in navigator) {
 					window.addEventListener('load', () => {
-						navigator.serviceWorker.register('./sw.js?v=0094')
+						navigator.serviceWorker.register('./sw.js?v=0101')
 							.then(reg => {
 								console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
 							})
@@ -2479,10 +2621,23 @@
 		// ======== Inicialização do sistema de integração ========
 		// Bootstrap do módulo de sincronização offline/online
 		function initSync() {
+			console.log('🚀 Inicializando sistema de sincronização...');
+			
 			// Cache de referências a elementos DOM para performance
 			syncBtn = document.getElementById('sync-btn');
 			syncBadge = document.getElementById('sync-badge');
 			syncIcon = syncBtn.querySelector('i');
+			toggleAutoSyncBtn = document.getElementById('toggle-auto-sync-btn');
+			toggleAutoSyncText = document.getElementById('toggle-auto-sync-text');
+
+			if (!toggleAutoSyncBtn) {
+				console.error('❌ Botão toggle-auto-sync-btn não encontrado!');
+			} else {
+				console.log('✅ Botão de toggle encontrado');
+			}
+
+			loadAutoSyncPreference();
+			updateAutoSyncToggleUI();
 			
 			// Inicialização do polling de sincronização
 			startSyncInterval();
@@ -2493,11 +2648,18 @@
 			// Binding de eventos de mudança de estado de rede
 			window.addEventListener('online', handleOnlineStatus);
 			window.addEventListener('offline', handleOfflineStatus);
+			
+			console.log('✅ Sistema de sincronização iniciado');
 		}
 
 		// ======== Gerenciamento do estado online/offline ========
 		// Handlers para transições de estado online/offline
 		function handleOnlineStatus() {
+			if (syncState.autoSyncBlocked) {
+				showNotification('Conexão restaurada - modo manual ativo', 'info');
+				return;
+			}
+			
 			showNotification('Conexão restaurada - Sincronizando...', 'success');
 			startSyncInterval();	// Reinicia polling
 			attemptSync();			// Trigger de sincronização imediata
@@ -2512,7 +2674,7 @@
 		// ======== Controle do intervalo de sincronização ========
 		// Gerenciamento de interval timer para sincronização periódica
 		function startSyncInterval() {
-			if (!navigator.onLine) return;	// Early exit se offline
+			if (!navigator.onLine || syncState.autoSyncBlocked) return;	// Early exit se offline ou modo manual
 			
 			stopSyncInterval(); // Idempotência: garante que não há intervalos duplicados
 			
@@ -2531,6 +2693,63 @@
 			}
 		}
 
+		function loadAutoSyncPreference() {
+			// Carrega preferência do localStorage, padrão é FALSE (sincronização ATIVA)
+			const storedValue = localStorage.getItem(AUTO_SYNC_STORAGE_KEY);
+			
+			// Se nunca foi definido, define como false (ativo) e salva
+			if (storedValue === null) {
+				syncState.autoSyncBlocked = false;
+				localStorage.setItem(AUTO_SYNC_STORAGE_KEY, 'false');
+				console.log('✅ Sincronização automática ATIVA (primeira vez)');
+			} else {
+				syncState.autoSyncBlocked = storedValue === 'true';
+				console.log(`📋 Preferência carregada: Sync Auto ${syncState.autoSyncBlocked ? 'BLOQUEADA' : 'ATIVA'}`);
+			}
+		}
+
+		function updateAutoSyncToggleUI() {
+			if (!toggleAutoSyncBtn || !toggleAutoSyncText) {
+				console.warn('⚠️ Elementos do botão de toggle não encontrados');
+				return;
+			}
+
+			if (syncState.autoSyncBlocked) {
+				toggleAutoSyncText.textContent = 'Auto Sync: Bloqueada';
+				toggleAutoSyncBtn.classList.remove('btn-secondary');
+				toggleAutoSyncBtn.classList.add('bg-red-100', 'text-red-800', 'border', 'border-red-300');
+				toggleAutoSyncBtn.setAttribute('aria-pressed', 'true');
+				toggleAutoSyncBtn.title = 'Clique para ATIVAR a sincronização automática';
+				console.log('🔴 UI: Mostrando como BLOQUEADA');
+			} else {
+				toggleAutoSyncText.textContent = 'Auto Sync: Ativa';
+				toggleAutoSyncBtn.classList.add('btn-secondary');
+				toggleAutoSyncBtn.classList.remove('bg-red-100', 'text-red-800', 'border', 'border-red-300');
+				toggleAutoSyncBtn.setAttribute('aria-pressed', 'false');
+				toggleAutoSyncBtn.title = 'Clique para BLOQUEAR a sincronização automática';
+				console.log('🟢 UI: Mostrando como ATIVA');
+			}
+		}
+
+		function toggleAutoSyncMode() {
+			syncState.autoSyncBlocked = !syncState.autoSyncBlocked;
+			localStorage.setItem(AUTO_SYNC_STORAGE_KEY, String(syncState.autoSyncBlocked));
+			console.log(`🔄 Toggle: Sync Auto agora está ${syncState.autoSyncBlocked ? 'BLOQUEADA' : 'ATIVA'}`);
+			updateAutoSyncToggleUI();
+
+			if (syncState.autoSyncBlocked) {
+				stopSyncInterval();
+				showNotification('Sincronização automática bloqueada. Use "Sincronizar" manualmente.', 'info');
+				return;
+			}
+
+			startSyncInterval();
+			showNotification('Sincronização automática reativada.', 'success');
+			if (navigator.onLine) {
+				attemptSync();
+			}
+		}
+		
 		// ======== Sincronização manual ========
 		// Trigger explícito de sincronização via ação do usuário
 		async function manualSync() {
