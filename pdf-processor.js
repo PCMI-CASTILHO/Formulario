@@ -206,21 +206,21 @@ async function processarPDFsAutomatico(formData) {
         // 3. Upload para Supabase (apenas se não existir)
         if (materiaisExiste && relatorioExiste) {
             console.log('ℹ️ PDFs já existem no Supabase, usando URLs existentes');
-            urlMateriais = `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${arquivoMateriais}`;
-            urlRelatorio = `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${arquivoRelatorio}`;
+            urlMateriais = `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${encodeURIComponent(arquivoMateriais)}`;
+            urlRelatorio = `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${encodeURIComponent(arquivoRelatorio)}`;
         } else {
             console.log('☁️ Fazendo upload para Supabase...');
             
             if (!materiaisExiste) {
                 urlMateriais = await uploadParaSupabase(pdfFichaBlob, arquivoMateriais);
             } else {
-                urlMateriais = `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${arquivoMateriais}`;
+                urlMateriais = `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${encodeURIComponent(arquivoMateriais)}`;
             }
             
             if (!relatorioExiste) {
                 urlRelatorio = await uploadParaSupabase(pdfRelatorioBlob, arquivoRelatorio);
             } else {
-                urlRelatorio = `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${arquivoRelatorio}`;
+                urlRelatorio = `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${encodeURIComponent(arquivoRelatorio)}`;
             }
         }
 
@@ -285,9 +285,15 @@ async function processarPDFsAutomatico(formData) {
 // ======== VERIFICAR SE ARQUIVO EXISTE NO SUPABASE ========
 async function verificarArquivoExiste(filename) {
     try {
+        const encodedFilename = encodeURIComponent(filename);
         const response = await fetch(
-            `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${filename}`,
-            { method: 'HEAD' }
+            `${SUPABASE_CONFIG.url}/storage/v1/object/${SUPABASE_CONFIG.bucket}/${encodedFilename}`,
+            {
+                method: 'HEAD',
+                headers: {
+                    'Authorization': `Bearer ${SUPABASE_CONFIG.anonKey}`
+                }
+            }
         );
         return response.ok;
     } catch (err) {
@@ -301,8 +307,9 @@ async function uploadParaSupabase(blob, filename) {
         const formData = new FormData();
         formData.append('file', blob, filename);
 
+        const encodedFilename = encodeURIComponent(filename);
         const response = await fetch(
-            `${SUPABASE_CONFIG.url}/storage/v1/object/${SUPABASE_CONFIG.bucket}/${filename}`,
+            `${SUPABASE_CONFIG.url}/storage/v1/object/${SUPABASE_CONFIG.bucket}/${encodedFilename}`,
             {
                 method: 'POST',
                 headers: {
@@ -317,7 +324,7 @@ async function uploadParaSupabase(blob, filename) {
             throw new Error(`Upload falhou (${response.status}): ${error}`);
         }
 
-        const publicUrl = `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${filename}`;
+        const publicUrl = `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${encodedFilename}`;
         console.log(`✅ Arquivo ${filename} enviado para Supabase`);
         return publicUrl;
 
