@@ -191,37 +191,31 @@
                 </div>
                 <h1 class="text-xl font-bold text-gray-800">Formulário de Serviço</h1>
             </div>
-			<div class="flex flex-col items-end gap-2 md:flex-row md:items-center md:space-x-4 md:gap-0">
+			<div class="flex items-center space-x-4">
 				<!-- Indicador de status de conexão -->
-				<div id="status" class="flex items-center text-sm mb-1 md:mb-0">
+				<div id="status" class="flex items-center text-sm">
 					<span id="status-indicator" class="status-indicator status-offline"></span>
 					<span id="status-text">Offline</span>
 				</div>
-				<!-- Container dos botões com grid responsivo -->
-				<div class="grid grid-cols-2 gap-2 w-full md:w-auto md:flex md:items-center md:space-x-2 md:gap-0">
-					<!-- Botão para bloquear sincronização automática -->
-					<button id="toggle-auto-sync-btn" class="btn-secondary px-2 py-2 md:px-4 rounded-lg flex items-center justify-center" aria-pressed="false" title="Alterna entre sincronização automática e manual">
-						<i class="fas fa-sync-alt md:mr-2"></i>
-						<span id="toggle-auto-sync-text" class="hidden md:inline ml-2 md:ml-0">Auto Sync: Ativa</span>
-					</button>
-					<!-- Botão de sincronização de dados offline -->
-					<button id="sync-btn" class="btn-primary px-2 py-2 md:px-4 rounded-lg flex items-center justify-center relative" title="Sincronizar dados pendentes">
-						<i class="fas fa-sync-alt md:mr-2"></i>
-						<span class="hidden md:inline ml-2 md:ml-0">Sincronizar</span>
-						<!-- Badge para mostrar pendências -->
-						<span id="sync-badge" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full text-xs w-5 h-5 flex items-center justify-center hidden">0</span>
-					</button>
-					<!-- Botão de exportação de dados -->
-					<button id="export-btn" class="btn-primary px-2 py-2 md:px-4 rounded-lg flex items-center justify-center" title="Salvar formulário">
-						<i class="fas fa-download md:mr-2"></i>
-						<span class="hidden md:inline ml-2 md:ml-0">Salvar</span>
-					</button>
-					<!-- Botão para limpar formulário -->
-					<button id="clear-form-btn" class="btn-secondary px-2 py-2 md:px-4 rounded-lg flex items-center justify-center text-red-600 border-red-200 hover:text-red-700" title="Limpar formulário">
-						<i class="fas fa-eraser md:mr-2"></i>
-						<span class="hidden md:inline ml-2 md:ml-0">Limpar Formulário</span>
-					</button>
-				</div>
+				<!-- Botão para bloquear sincronização automática -->
+				<button id="toggle-auto-sync-btn" class="btn-secondary px-4 py-2 rounded-lg flex items-center" aria-pressed="false" title="Alterna entre sincronização automática e manual">
+					<i class="fas fa-sync-alt mr-2"></i>
+					<span id="toggle-auto-sync-text">Auto Sync: Ativa</span>
+				</button>
+				<!-- Botão de sincronização de dados offline -->
+				<button id="sync-btn" class="btn-primary px-4 py-2 rounded-lg flex items-center relative">
+					<i class="fas fa-sync-alt mr-2"></i> Sincronizar
+					<!-- Badge para mostrar pendências -->
+					<span id="sync-badge" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full text-xs w-5 h-5 flex items-center justify-center hidden">0</span>
+				</button>
+				<!-- Botão de exportação de dados -->
+				<button id="export-btn" class="btn-primary px-4 py-2 rounded-lg flex items-center">
+					<i class="fas fa-download mr-2"></i> Salvar
+				</button>
+				<!-- Botão para limpar formulário -->
+				<button id="clear-form-btn" class="btn-secondary px-4 py-2 rounded-lg flex items-center text-red-600 border-red-200 hover:text-red-700">
+					<i class="fas fa-eraser mr-2"></i> Limpar Formulário
+				</button>
 			</div>
         </div>
     </header>
@@ -1994,7 +1988,7 @@
 				// Fase 5: Service Worker registration (PWA capabilities)
 				if ('serviceWorker' in navigator) {
 					window.addEventListener('load', () => {
-						navigator.serviceWorker.register('./sw.js?v=0103')
+						navigator.serviceWorker.register('./sw.js?v=0104')
 							.then(reg => {
 								console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
 							})
