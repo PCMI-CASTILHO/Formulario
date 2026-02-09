@@ -208,14 +208,6 @@
 					<!-- Badge para mostrar pendências -->
 					<span id="sync-badge" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full text-xs w-5 h-5 flex items-center justify-center hidden">0</span>
 				</button>
-				<!-- Botão de exportação de dados -->
-				<button id="export-btn" class="btn-primary px-4 py-2 rounded-lg flex items-center">
-					<i class="fas fa-download mr-2"></i> Salvar
-				</button>
-				<!-- Botão para limpar formulário -->
-				<button id="clear-form-btn" class="btn-secondary px-4 py-2 rounded-lg flex items-center text-red-600 border-red-200 hover:text-red-700">
-					<i class="fas fa-eraser mr-2"></i> Limpar Formulário
-				</button>
 			</div>
         </div>
     </header>
@@ -456,6 +448,15 @@
             <div id="materiais-lista" class="space-y-2">
             </div>
         </section>
+
+		<div class="flex flex-col sm:flex-row sm:justify-end gap-4 mt-6">
+			<button id="export-btn" class="btn-primary px-6 py-3 rounded-lg flex items-center justify-center">
+				<i class="fas fa-download mr-2"></i> Salvar
+			</button>
+			<button id="clear-form-btn" class="btn-secondary px-6 py-3 rounded-lg flex items-center justify-center text-red-600 border-red-200 hover:text-red-700">
+				<i class="fas fa-eraser mr-2"></i> Limpar Formulário
+			</button>
+		</div>
     </main>
 	
 	<!-- Modal para visualização ampliada de imagens -->
@@ -1988,7 +1989,7 @@
 				// Fase 5: Service Worker registration (PWA capabilities)
 				if ('serviceWorker' in navigator) {
 					window.addEventListener('load', () => {
-						navigator.serviceWorker.register('./sw.js?v=0104')
+						navigator.serviceWorker.register('./sw.js?v=0105')
 							.then(reg => {
 								console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
 							})
