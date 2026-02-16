@@ -91,12 +91,16 @@ async function verificarPendenciasPDFs() {
 
         // Busca formulários que:
         // 1. Estão sincronizados (têm serverId)
-        // 2. Ainda não tiveram PDFs enviados
+        // 2. Ainda não tiveram PDFs enviados OU foram editados após o último envio
         // 3. Não estão sendo processados no momento
         const formsPendentes = forms.filter(f => 
             f.sincronizado && 
             f.serverId && 
-            !f.pdfsEnviados &&
+            (
+                !f.pdfsEnviados ||
+                f.pdfsPrecisamAtualizar ||
+                (f.pdfsEnviadosAt && f.updatedAt && new Date(f.updatedAt) > new Date(f.pdfsEnviadosAt))
+            ) &&
             !f.processandoPDFs
         );
 
@@ -193,37 +197,16 @@ async function processarPDFsAutomatico(formData) {
 
         console.log('✅ PDFs gerados com sucesso');
 
-        // 2. Verificar se já existem no Supabase
+        // 2. Sempre atualizar os arquivos no Supabase para evitar reenvio de PDF antigo
         const arquivoMateriais = `materiais_${serverId}.pdf`;
         const arquivoRelatorio = `relatorio_${serverId}.pdf`;
         
-        console.log('🔍 Verificando se PDFs já existem no Supabase...');
-        const materiaisExiste = await verificarArquivoExiste(arquivoMateriais);
-        const relatorioExiste = await verificarArquivoExiste(arquivoRelatorio);
-
-        let urlMateriais, urlRelatorio;
-
-        // 3. Upload para Supabase (apenas se não existir)
-        if (materiaisExiste && relatorioExiste) {
-            console.log('ℹ️ PDFs já existem no Supabase, usando URLs existentes');
-            urlMateriais = `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${encodeURIComponent(arquivoMateriais)}`;
-            urlRelatorio = `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${encodeURIComponent(arquivoRelatorio)}`;
-        } else {
-            console.log('☁️ Fazendo upload para Supabase...');
-            
-            if (!materiaisExiste) {
-                urlMateriais = await uploadParaSupabase(pdfFichaBlob, arquivoMateriais);
-            } else {
-                urlMateriais = `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${encodeURIComponent(arquivoMateriais)}`;
-            }
-            
-            if (!relatorioExiste) {
-                urlRelatorio = await uploadParaSupabase(pdfRelatorioBlob, arquivoRelatorio);
-            } else {
-                urlRelatorio = `${SUPABASE_CONFIG.url}/storage/v1/object/public/${SUPABASE_CONFIG.bucket}/${encodeURIComponent(arquivoRelatorio)}`;
-            }
-        }
-
+        console.log('🔄 Atualizando PDFs no Supabase...');
+        const [urlMateriais, urlRelatorio] = await Promise.all([
+            uploadParaSupabase(pdfFichaBlob, arquivoMateriais),
+            uploadParaSupabase(pdfRelatorioBlob, arquivoRelatorio)
+        ]);
+        
         console.log('✅ PDFs disponíveis:', { urlMateriais, urlRelatorio });
 
         // 4. Enviar para WhatsApp
@@ -239,6 +222,7 @@ async function processarPDFsAutomatico(formData) {
         if (form) {
             form.pdfsEnviados = true;
             form.pdfsEnviadosAt = new Date().toISOString();
+            form.pdfsPrecisamAtualizar = false;
             form.processandoPDFs = false;
             await db.put('formularios', form);
             console.log('✅ Marcado como PDFs enviados no DB');
@@ -282,28 +266,12 @@ async function processarPDFsAutomatico(formData) {
     }
 }
 
-// ======== VERIFICAR SE ARQUIVO EXISTE NO SUPABASE ========
-async function verificarArquivoExiste(filename) {
-    try {
-        const encodedFilename = encodeURIComponent(filename);
-        const response = await fetch(
-            `${SUPABASE_CONFIG.url}/storage/v1/object/${SUPABASE_CONFIG.bucket}/${encodedFilename}`,
-            {
-                method: 'HEAD',
-                headers: {
-                    'Authorization': `Bearer ${SUPABASE_CONFIG.anonKey}`
-                }
-            }
-        );
-        return response.ok;
-    } catch (err) {
-        return false;
-    }
-}
-
 // ======== UPLOAD PARA SUPABASE ========
 async function uploadParaSupabase(blob, filename) {
     try {
+        // Remove versão anterior para garantir que o arquivo seja sempre atualizado
+        await deletarDoSupabase(filename);
+        
         const formData = new FormData();
         formData.append('file', blob, filename);
 
