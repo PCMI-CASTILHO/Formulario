@@ -13,7 +13,7 @@ const SUPABASE_CONFIG = {
 const WHATSAPP_CONFIG = {
     apiUrl: 'https://api.leadfinder.com.br/integracao/enviarMensagem/6B2991B488/ARQUIVO',
     token: '58103127083906988C16EAD628F241E78C350689710608F82A91D2D3C4D36757',
-    groupId: '120363407457995562-group'
+    groupId: '120363021586402490-group'
 };
 
 // ======== VARIÁVEIS DE CONTROLE ========
