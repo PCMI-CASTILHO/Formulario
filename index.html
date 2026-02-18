@@ -1445,8 +1445,6 @@
 		function initDB() {
 			// Retorna conexão existente se disponível
 			if (dbPromise) return dbPromise;
-
-			let recoveredMissingStore = false;
 			
 			// Abre conexão com estratégia de upgrade
 			dbPromise = idb.openDB(DB_NAME, DB_VERSION, {
@@ -1509,13 +1507,7 @@
 						}
 					}
 				},
-			}).then(async db => {
-				// Validação defensiva: força fallback centralizado no startApp
-				if (!db.objectStoreNames.contains(STORE_NAME)) {
-					db.close();
-					throw new Error(`Object store ausente: ${STORE_NAME}`);
-				}
-				
+			}).then(db => {
 				console.log('Banco de dados inicializado com sucesso');
 				return db;
 			}).catch(error => {
@@ -2001,7 +1993,7 @@
 				// Fase 5: Service Worker registration (PWA capabilities)
 				if ('serviceWorker' in navigator) {
 					window.addEventListener('load', () => {
-						navigator.serviceWorker.register('./sw.js?v=0112')
+						navigator.serviceWorker.register('./sw.js?v=0116')
 							.then(reg => {
 								console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
 							})
@@ -2111,6 +2103,19 @@
 			const pageWidth = doc.internal.pageSize.getWidth();
 			const pageHeight = doc.internal.pageSize.getHeight();
 
+			// Configuração de tabela para layout de 3 colunas
+			const tableStyles3Col = {
+				styles: { fontSize: 8, cellPadding: 3, halign: 'center' },
+				headStyles: { fillColor: [0, 82, 163], textColor: 255, fontStyle: 'bold', halign: 'center' },
+				columnStyles: {
+					0: { cellWidth: (pageWidth - 16) / 3 },
+					1: { cellWidth: (pageWidth - 16) / 3 },
+					2: { cellWidth: (pageWidth - 16) / 3 }
+				},
+				margin: { left: 8, right: 8 },
+				theme: 'grid'
+			};
+
 			const logo = await carregarImagem("Logo.png");
 			let y = 20;	// Posição vertical do cursor
 
@@ -2160,6 +2165,18 @@
 				head: [['CLIENTE', 'CIDADE', 'EQUIPAMENTO', 'Nº SÉRIE']],
 				body: table1Data,
 				...tableStyles4Col
+			});
+
+			y = doc.lastAutoTable.finalY + 4;
+
+			// Tabela de informações do solicitante (sempre em branco)
+			const tableSolicitanteData = [['', '', '']];
+
+			doc.autoTable({
+				startY: y,
+				head: [['NOME DO SOLICITANTE', 'FONE', 'E-MAIL']],
+				body: tableSolicitanteData,
+				...tableStyles3Col
 			});
 			
 			y = doc.lastAutoTable.finalY + 4;
