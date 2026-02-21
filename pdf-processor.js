@@ -212,11 +212,11 @@ async function processarPDFsAutomatico(formData) {
         // 4. Enviar para WhatsApp
         console.log('📱 Enviando para WhatsApp...');
         const detalhesFormulario = [
-            `Cliente: ${formDataCompleto.clienteNome || formDataCompleto.cliente || '-'}`,
+            `Cliente: ${formDataCompleto.cliente || '-'}`,
             `Cidade: ${formDataCompleto.cidade || '-'}`,
             `Equipamento: ${formDataCompleto.equipamento || '-'}`,
             `Serviço: ${formDataCompleto.servico || '-'}`,
-            `Técnico: ${formDataCompleto.tecnicoNome || formDataCompleto.tecnico || '-'}`
+            `Técnico: ${formDataCompleto.tecnico || '-'}`
         ].join('\n');
 
         await enviarParaWhatsApp(urlMateriais, `Ficha de Materiais (Nº ${serverId})\n\n${detalhesFormulario}`);
